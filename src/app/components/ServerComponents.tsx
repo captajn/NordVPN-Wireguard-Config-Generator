@@ -3,31 +3,9 @@
 import { memo, useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import debounce from 'lodash/debounce';
+import type { ServerInfo } from '../types';
 
 // Định nghĩa kiểu dữ liệu cho các component
-interface NordVPNTechnology {
-  id: number;
-  name: string;
-  identifier: string;
-}
-
-interface NordVPNServer {
-  id: number;
-  name: string;
-  station: string;
-  hostname: string;
-  load: number;
-  status: string;
-  locations: Array<{
-    country: {
-      name: string;
-    };
-    city?: {
-      name: string;
-    };
-  }>;
-  technologies: NordVPNTechnology[];
-}
 
 // ===== SERVER FILTERS COMPONENT =====
 interface CountryOption {
@@ -201,9 +179,6 @@ export function ServerListSkeleton() {
             <th scope="col" className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
               IP
             </th>
-            <th scope="col" className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              Công nghệ
-            </th>
           </tr>
         </thead>
         <tbody className="bg-[#1f2937] divide-y divide-[#2d3748]">
@@ -226,12 +201,6 @@ export function ServerListSkeleton() {
               <td className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
                 <div className="h-5 bg-gray-700 rounded animate-pulse w-16"></div>
               </td>
-              <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-normal">
-                <div className="flex gap-1 flex-wrap">
-                  <div className="h-5 bg-gray-700 rounded animate-pulse w-10"></div>
-                  <div className="h-5 bg-gray-700 rounded animate-pulse w-10"></div>
-                </div>
-              </td>
             </tr>
           ))}
         </tbody>
@@ -242,7 +211,7 @@ export function ServerListSkeleton() {
 
 // ===== SERVER LIST COMPONENT =====
 interface ServerListProps {
-  servers: NordVPNServer[];
+  servers: ServerInfo[];
   params: {
     page: string;
     country: string;
@@ -303,9 +272,6 @@ const ServerList = memo(function ServerList({ servers, params, error }: ServerLi
             <th scope="col" className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
               IP
             </th>
-            <th scope="col" className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              Công nghệ
-            </th>
           </tr>
         </thead>
         <tbody className="bg-[#1f2937] divide-y divide-[#2d3748]">
@@ -318,30 +284,25 @@ const ServerList = memo(function ServerList({ servers, params, error }: ServerLi
   );
 });
 
-const ServerRow = memo(function ServerRow({ server }: { server: NordVPNServer }) {
+const ServerRow = memo(function ServerRow({ server }: { server: ServerInfo }) {
   return (
     <tr className="hover:bg-[#2d3748] transition-colors duration-200">
       <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
         <span className="text-white">{server.name}</span>
       </td>
       <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        {server.locations[0]?.country?.name && (
-          <div>
-            <span className="text-white">{server.locations[0].country.name}</span>
-            {server.locations[0]?.city?.name && (
-              <span className="text-gray-400 text-xs ml-1">({server.locations[0].city.name})</span>
-            )}
-          </div>
-        )}
+        <div>
+          <span className="text-white">{server.country}</span>
+          {server.city && (
+            <span className="text-gray-400 text-xs ml-1">({server.city})</span>
+          )}
+        </div>
       </td>
       <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
         <LoadIndicator load={server.load} />
       </td>
       <td className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        <span className="text-gray-400 text-xs font-mono">{server.hostname || server.station}</span>
-      </td>
-      <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-normal">
-        <TechBadges technologies={server.technologies} />
+        <span className="text-gray-400 text-xs font-mono">{server.hostname}</span>
       </td>
     </tr>
   );
@@ -362,22 +323,6 @@ const LoadIndicator = memo(function LoadIndicator({ load }: { load: number }) {
         ></div>
       </div>
       <span className="text-white text-xs sm:text-sm md:text-base whitespace-nowrap">{load}%</span>
-    </div>
-  );
-});
-
-// Component hiển thị các badge công nghệ
-const TechBadges = memo(function TechBadges({ technologies }: { technologies: NordVPNServer['technologies'] }) {
-  return (
-    <div className="flex gap-1 flex-wrap">
-      {technologies.map((tech: NordVPNTechnology) => (
-        <span 
-          key={tech.id}
-          className="bg-[#121827] px-1 py-0.5 sm:px-1.5 sm:py-0.5 md:px-2 md:py-1 rounded text-[8px] sm:text-[10px] md:text-xs text-[#f8b700] border border-[#2d3748] hover:bg-[#2d3748] transition-colors"
-        >
-          {tech.identifier}
-        </span>
-      ))}
     </div>
   );
 });

@@ -7,6 +7,16 @@ import type {
   NordVPNCountry
 } from '../types';
 
+interface ServerInfo {
+  id: number;
+  name: string;
+  hostname: string;
+  country: string;
+  city: string;
+  load: number;
+  publicKey: string;
+}
+
 // Định nghĩa các interface cần thiết
 interface Location {
   country: {
@@ -132,7 +142,7 @@ function findPublicKey(server: NordVPNServer): string {
  * Lấy danh sách máy chủ NordVPN
  * @param params Tham số tìm kiếm, lọc và phân trang
  */
-export async function getServers(params?: ServerParams): Promise<ApiResponse<{ servers: NordVPNServer[], total: number }>> {
+export async function getServers(params?: ServerParams): Promise<ApiResponse<{ servers: ServerInfo[], total: number }>> {
   try {
     // Tính toán limit và offset cho phân trang
     const limit = params?.limit || 500;
@@ -153,7 +163,7 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
       throw new Error(`API trả về lỗi khi lấy tổng số servers: ${countResponse.status}`);
     }
 
-    const { count: totalServers } = await countResponse.json();
+    await countResponse.json();
     
     // Sử dụng API trực tiếp thay vì qua proxy
     let url = `${NORD_API_BASE}/servers?limit=${limit}&offset=${offset}`;
@@ -231,11 +241,47 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
       }
     }
 
+    // Chuyển đổi và lọc dữ liệu
+    const processedServers: ServerInfo[] = filteredServers
+      .filter(server => {
+        // Kiểm tra location hợp lệ
+        const hasValidLocation = server.locations && server.locations.length > 0;
+        if (!hasValidLocation) {
+          console.log(`Server ${server.name} không có location`);
+        }
+        return hasValidLocation;
+      })
+      .map(server => {
+        const location = server.locations[0];
+        const country = location?.country?.name || 'Unknown';
+        const city = location?.city?.name || '';
+        const publicKey = findPublicKey(server);
+        
+        // Log server không có public key
+        if (!publicKey) {
+          console.log(`Server ${server.name} không có public key`);
+        }
+        
+        return {
+          id: server.id,
+          name: server.name,
+          hostname: server.station || server.hostname,
+          country,
+          city,
+          load: server.load,
+          publicKey
+        };
+      })
+      .filter(server => server.publicKey);
+
+    // Log kết quả cuối cùng
+    console.log(`Số server sau khi lọc: ${processedServers.length}`);
+
     return {
       success: true,
       data: {
-        servers: filteredServers,
-        total: filteredServers.length
+        servers: processedServers,
+        total: processedServers.length
       }
     };
   } catch (error) {
@@ -321,7 +367,7 @@ export async function getSocksServers(params?: Omit<ServerParams, 'filters'>): P
 /**
  * Lấy danh sách máy chủ WireGuard
  */
-export async function getWireguardServers(params?: Omit<ServerParams, 'filters'>): Promise<ApiResponse<{ servers: NordVPNServer[], total: number }>> {
+export async function getWireguardServers(params?: Omit<ServerParams, 'filters'>): Promise<ApiResponse<{ servers: ServerInfo[], total: number }>> {
   return getServers({
     ...params, 
     filters: { 'servers_technologies][identifier': 'wireguard_udp' }

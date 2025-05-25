@@ -9,6 +9,16 @@ export interface ServerParams {
   fetchAll?: boolean;
 }
 
+export interface ServerInfo {
+  id: number;
+  name: string;
+  hostname: string;
+  country: string;
+  city: string;
+  load: number;
+  publicKey: string;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;

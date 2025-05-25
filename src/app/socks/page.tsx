@@ -13,7 +13,6 @@ export default function SocksPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [countryServers, setCountryServers] = useState<Record<string, NordVPNServer[]>>({});
   const [loadingCredentials, setLoadingCredentials] = useState(false);
   
   // Thêm state cho việc lọc và sắp xếp
@@ -23,6 +22,53 @@ export default function SocksPage() {
   const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc' | 'name-asc' | 'name-desc'>('load-asc');
   const [filteredServers, setFilteredServers] = useState<NordVPNServer[]>([]);
   const [countriesData, setCountriesData] = useState<Array<{id: number, name: string}>>([]);
+  
+  // Sắp xếp danh sách máy chủ
+  const sortServers = useCallback((serverList: NordVPNServer[], sort: string) => {
+    const sorted = [...serverList];
+    
+    switch (sort) {
+      case 'load-asc':
+        return sorted.sort((a, b) => a.load - b.load);
+      case 'load-desc':
+        return sorted.sort((a, b) => b.load - a.load);
+      case 'name-asc':
+        return sorted.sort((a, b) => a.hostname.localeCompare(b.hostname));
+      case 'name-desc':
+        return sorted.sort((a, b) => b.hostname.localeCompare(a.hostname));
+      default:
+        return sorted;
+    }
+  }, []);
+  
+  // Hàm lấy danh sách máy chủ SOCKS
+  const fetchSocksServers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await getSocksServers({
+        revalidateSeconds: 60 // Cache 1 phút
+      });
+      
+      if (response.success && response.data) {
+        const serverList = response.data.servers;
+        setServers(serverList);
+        setFilteredServers(sortServers(serverList, sortOption));
+        
+        // Tạo danh sách quốc gia từ máy chủ
+        const uniqueCountries = Array.from(new Set(
+          serverList.map(server => server.locations[0]?.country?.name)
+        )).filter(Boolean) as string[];
+        
+        setCountries(uniqueCountries.sort());
+      } else {
+        setError(response.error || 'Lỗi không xác định');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Lỗi không xác định');
+    } finally {
+      setLoading(false);
+    }
+  }, [sortOption, sortServers]);
   
   useEffect(() => {
     // Kiểm tra xem có token đã lưu không
@@ -48,7 +94,7 @@ export default function SocksPage() {
     
     // Lấy danh sách quốc gia
     fetchCountries();
-  }, []);
+  }, [fetchSocksServers]);
   
   // Lấy danh sách quốc gia từ API
   const fetchCountries = async () => {
@@ -61,99 +107,6 @@ export default function SocksPage() {
       }
     } catch (err) {
       console.error('Lỗi khi lấy danh sách quốc gia:', err);
-    }
-  };
-  
-  // Sắp xếp danh sách máy chủ
-  const sortServers = useCallback((serverList: NordVPNServer[], sort: string) => {
-    const sorted = [...serverList];
-    
-    switch (sort) {
-      case 'load-asc':
-        return sorted.sort((a, b) => a.load - b.load);
-      case 'load-desc':
-        return sorted.sort((a, b) => b.load - a.load);
-      case 'name-asc':
-        return sorted.sort((a, b) => a.hostname.localeCompare(b.hostname));
-      case 'name-desc':
-        return sorted.sort((a, b) => b.hostname.localeCompare(a.hostname));
-      default:
-        return sorted;
-    }
-  }, []);
-  
-  const fetchUserCredentials = async (token: string) => {
-    try {
-      setLoadingCredentials(true);
-      
-      const response = await fetch('/api/nordvpn/user', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Không thể lấy thông tin đăng nhập');
-      }
-      
-      if (data.username && data.password) {
-        setUsername(data.username);
-        setPassword(data.password);
-        setIsAuthenticated(true);
-        
-        // Lưu thông tin đăng nhập vào localStorage
-        localStorage.setItem('nordvpn_username', data.username);
-        localStorage.setItem('nordvpn_password', data.password);
-      }
-    } catch (err) {
-      console.error('Lỗi khi lấy thông tin đăng nhập:', err);
-      // Không hiển thị lỗi này cho người dùng
-    } finally {
-      setLoadingCredentials(false);
-    }
-  };
-  
-  const fetchSocksServers = async () => {
-    try {
-      setLoading(true);
-      const response = await getSocksServers();
-      
-      if (!response.success) {
-        throw new Error(response.error || 'Không thể lấy danh sách máy chủ');
-      }
-      
-      const serverList = response.data?.servers || [];
-      setServers(serverList);
-      setFilteredServers(sortServers(serverList, sortOption));
-      
-      // Phân loại máy chủ theo quốc gia
-      const serversByCountry: Record<string, NordVPNServer[]> = {};
-      
-      serverList.forEach(server => {
-        const country = server.locations[0]?.country.name || 'Unknown';
-        if (!serversByCountry[country]) {
-          serversByCountry[country] = [];
-        }
-        serversByCountry[country].push(server);
-      });
-      
-      setCountryServers(serversByCountry);
-      
-      // Tạo danh sách quốc gia từ máy chủ
-      if (countriesData.length === 0) {
-        const uniqueCountries = [...new Set(serverList.map(server => 
-          server.locations[0]?.country.name || 'Unknown'
-        ))].sort();
-        setCountries(uniqueCountries);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
-    } finally {
-      setLoading(false);
     }
   };
   
@@ -234,6 +187,41 @@ export default function SocksPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const fetchUserCredentials = async (token: string) => {
+    try {
+      setLoadingCredentials(true);
+      
+      const response = await fetch('/api/nordvpn/user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Không thể lấy thông tin đăng nhập');
+      }
+      
+      if (data.username && data.password) {
+        setUsername(data.username);
+        setPassword(data.password);
+        setIsAuthenticated(true);
+        
+        // Lưu thông tin đăng nhập vào localStorage
+        localStorage.setItem('nordvpn_username', data.username);
+        localStorage.setItem('nordvpn_password', data.password);
+      }
+    } catch (err) {
+      console.error('Lỗi khi lấy thông tin đăng nhập:', err);
+      // Không hiển thị lỗi này cho người dùng
+    } finally {
+      setLoadingCredentials(false);
+    }
   };
 
   return (

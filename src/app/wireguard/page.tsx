@@ -19,29 +19,25 @@ type SortOption = 'load-asc' | 'load-desc' | 'name-asc' | 'name-desc' | 'country
 
 export default function WireGuardPage() {
   const [token, setToken] = useState('');
+  const [servers, setServers] = useState<ServerInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [privateKey, setPrivateKey] = useState('');
-  const [error, setError] = useState('');
-  const [debug, setDebug] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState(1);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc' | 'name-asc' | 'name-desc' | 'load-med' | 'load-high'>('load-asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filteredServers, setFilteredServers] = useState<ServerInfo[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const serversPerPage = 100;
   
   // Thêm state cho token expiration
   const [tokenExpiry, setTokenExpiry] = useState<Date | null>(null);
   
   // Thêm state cho danh sách máy chủ
-  const [servers, setServers] = useState<ServerInfo[]>([]);
   const [loadingServers, setLoadingServers] = useState(false);
-  const [selectedServer, setSelectedServer] = useState<ServerInfo | null>(null);
-  const [filteredServers, setFilteredServers] = useState<ServerInfo[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [countries, setCountries] = useState<string[]>([]);
-  const [sortOption, setSortOption] = useState<SortOption>('name-asc');
-  
-  // Thay đổi từ visibleCount sang phân trang
-  const [currentPage, setCurrentPage] = useState(1);
-  const serversPerPage = 100;
 
   // Thêm state cho danh sách quốc gia từ API
   const [countriesData, setCountriesData] = useState<Array<{id: number, name: string}>>([]);
@@ -95,7 +91,7 @@ export default function WireGuardPage() {
       
       if (savedPrivateKey) {
         setPrivateKey(savedPrivateKey);
-        setStep(2); // Tự động chuyển đến bước 2 nếu đã có private key
+        setIsAuthenticated(true);
       }
     }
   }, []);
@@ -187,10 +183,10 @@ export default function WireGuardPage() {
 
   // Lấy danh sách máy chủ khi vào bước 2
   useEffect(() => {
-    if (step === 2) {
+    if (isAuthenticated) {
       fetchServers();
     }
-  }, [step, fetchServers]);
+  }, [isAuthenticated, fetchServers]);
 
   // Lọc và sắp xếp danh sách máy chủ khi có thay đổi
   useEffect(() => {
@@ -269,7 +265,6 @@ export default function WireGuardPage() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setDebug('');
 
     try {
       const response = await fetch('/api/nordvpn/credentials', {
@@ -287,7 +282,6 @@ export default function WireGuardPage() {
       }
       
       if (!data.privateKey) {
-        setDebug(JSON.stringify(data, null, 2));
         throw new Error("Private key không tìm thấy trong phản hồi API. Vui lòng kiểm tra token của bạn.");
       }
       
@@ -301,7 +295,7 @@ export default function WireGuardPage() {
       }
       
       setPrivateKey(data.privateKey);
-      setStep(2);
+      setIsAuthenticated(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
     } finally {
@@ -346,17 +340,11 @@ export default function WireGuardPage() {
         throw new Error('Không tìm thấy private key');
       }
       
-      // Cập nhật server được chọn
-      setSelectedServer(server);
-      
       const configTemplate = generateWireGuardConfig(
         privateKey, 
         server.hostname, 
         server.publicKey
       );
-      
-      // Lưu cấu hình
-      // setConfig(configTemplate);
       
       // Tự động tải xuống
       const blob = new Blob([configTemplate], { type: 'text/plain' });
@@ -383,8 +371,7 @@ export default function WireGuardPage() {
     setToken('');
     setPrivateKey('');
     setTokenExpiry(null);
-    setStep(1);
-    setSelectedServer(null);
+    setIsAuthenticated(false);
   };
 
   return (
@@ -398,7 +385,7 @@ export default function WireGuardPage() {
           </h1>
           
           {/* Token Status & Logout */}
-          {step > 1 && (
+          {isAuthenticated && (
             <div className="mb-4 flex justify-between items-center bg-[#1f2937] p-3 rounded-lg border border-[#2d3748]">
               <div className="text-sm text-gray-400">
                 {tokenExpiry && (
@@ -428,21 +415,11 @@ export default function WireGuardPage() {
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg mb-4">
               <p>{error}</p>
-              {debug && (
-                <div className="mt-2">
-                  <details>
-                    <summary className="cursor-pointer text-sm hover:text-[#f8b700]">Xem thông tin gỡ lỗi</summary>
-                    <pre className="mt-2 text-xs p-2 bg-black/40 rounded overflow-x-auto">
-                      {debug}
-                    </pre>
-                  </details>
-                </div>
-              )}
             </div>
           )}
 
           {/* Step 1: Token Input */}
-          {step === 1 && (
+          {!isAuthenticated && (
             <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
               <h2 className="text-xl font-semibold mb-4 text-[#f8b700]">Nhập Token NordVPN</h2>
               <p className="mb-4 text-gray-300">
@@ -491,7 +468,7 @@ export default function WireGuardPage() {
           )}
 
           {/* Step 2: Server Selection */}
-          {step === 2 && (
+          {isAuthenticated && (
             <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
                 <div className="flex-1">

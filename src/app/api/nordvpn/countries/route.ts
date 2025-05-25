@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 interface NordVPNCountry {
   id: number;
@@ -16,7 +16,7 @@ interface NordVPNCountry {
   }>;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Truy cập trực tiếp API NordVPN thay vì qua proxy
     const apiUrl = "https://api.nordvpn.com/v1/servers/countries";

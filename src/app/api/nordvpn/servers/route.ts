@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 // Định nghĩa kiểu dữ liệu
 interface NordVPNTechnology {
@@ -65,7 +65,7 @@ function findPublicKey(server: NordVPNServer): string {
   return '';
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Lấy toàn bộ server có hỗ trợ WireGuard với limit cao hơn
     const apiUrl = "https://api.nordvpn.com/v1/servers?limit=7000&filters[servers_technologies]=wireguard_udp";

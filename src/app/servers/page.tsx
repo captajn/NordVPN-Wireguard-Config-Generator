@@ -1,7 +1,6 @@
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import { getServers, getCountries } from "../services/api";
-import { unstable_noStore as noStore } from 'next/cache';
 import Pagination from "../components/Pagination";
 import { ServerFilters, ServerList, ServerListSkeleton } from "../components/ServerComponents";
 import { Metadata } from "next";

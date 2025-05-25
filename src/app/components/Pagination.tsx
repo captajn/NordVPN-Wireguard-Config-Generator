@@ -20,12 +20,10 @@ export default function Pagination({ currentPage, totalPages, searchParams }: Pa
   // Tính toán các trang cần hiển thị
   const maxPagesToShow = 5;
   let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-  let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+  const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
   
   // Điều chỉnh lại startPage nếu endPage đã đạt giới hạn
-  if (endPage === totalPages) {
-    startPage = Math.max(1, endPage - maxPagesToShow + 1);
-  }
+  startPage = Math.max(1, endPage - maxPagesToShow + 1);
   
   // Tạo mảng các số trang
   for (let i = startPage; i <= endPage; i++) {
