@@ -1,13 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Tắt SWC minify
+  // Tắt console log trong production
   compiler: {
-    removeConsole: false,
+    removeConsole: process.env.NODE_ENV === 'production',
   },
-  // Tắt các tính năng thử nghiệm
-  experimental: {
-    // Không cần thiết nữa
+  
+  // Cấu hình logging
+  logging: {
+    fetches: {
+      fullUrl: false
+    }
   },
+
+  // Cấu hình output
+  output: 'standalone',
+
+  // Cấu hình môi trường
+  poweredByHeader: false,
+  reactStrictMode: true
 }
 
 module.exports = nextConfig 
