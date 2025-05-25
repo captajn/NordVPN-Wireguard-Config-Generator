@@ -20,7 +20,7 @@ type SortOption = 'load-asc' | 'load-desc' | 'name-asc' | 'name-desc' | 'country
 export default function WireGuardPage() {
   const [token, setToken] = useState('');
   const [servers, setServers] = useState<ServerInfo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [privateKey, setPrivateKey] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -59,6 +59,11 @@ export default function WireGuardPage() {
       behavior: 'smooth'
     });
   };
+
+  // Thêm useEffect để reset loading khi component mount
+  useEffect(() => {
+    setLoading(false);
+  }, []);
 
   // Khôi phục token từ localStorage khi trang được tải
   useEffect(() => {
@@ -261,48 +266,6 @@ export default function WireGuardPage() {
     }
   }, [servers, countriesData]);
 
-  const handleTokenSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const response = await fetch('/api/nordvpn/credentials', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || `Lỗi khi lấy thông tin xác thực: ${response.status}`);
-      }
-      
-      if (!data.privateKey) {
-        throw new Error("Private key không tìm thấy trong phản hồi API. Vui lòng kiểm tra token của bạn.");
-      }
-      
-      // Lưu token và private key vào localStorage
-      localStorage.setItem('nordvpn_token', token);
-      localStorage.setItem('nordvpn_private_key', data.privateKey);
-      
-      // Lưu thời gian hết hạn nếu có
-      if (data.expires_at) {
-        localStorage.setItem('nordvpn_expires_at', data.expires_at);
-      }
-      
-      setPrivateKey(data.privateKey);
-      setIsAuthenticated(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Thay thế loadMoreServers bằng các hàm phân trang
   const totalPages = Math.ceil(filteredServers.length / serversPerPage);
   
@@ -426,7 +389,63 @@ export default function WireGuardPage() {
                 Để tạo cấu hình WireGuard, bạn cần có token xác thực từ tài khoản NordVPN.
               </p>
               
-              <form onSubmit={handleTokenSubmit}>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const trimmedToken = token.trim();
+                
+                // Reset lỗi và trạng thái loading
+                setError('');
+                setLoading(false);
+                
+                if (!trimmedToken) {
+                  setError('Vui lòng nhập token');
+                  return;
+                }
+                
+                // Set loading trước khi gọi API
+                setLoading(true);
+                
+                // Gọi API xác thực token
+                fetch('/api/nordvpn/credentials', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ token: trimmedToken }),
+                })
+                .then(response => {
+                  if (!response.ok) {
+                    return response.json().then(data => {
+                      throw new Error(data.error || `Lỗi khi lấy thông tin xác thực: ${response.status}`);
+                    });
+                  }
+                  return response.json();
+                })
+                .then(data => {
+                  if (!data.privateKey) {
+                    throw new Error("Private key không tìm thấy trong phản hồi API. Vui lòng kiểm tra token của bạn.");
+                  }
+                  
+                  // Lưu token và private key vào localStorage
+                  localStorage.setItem('nordvpn_token', trimmedToken);
+                  localStorage.setItem('nordvpn_private_key', data.privateKey);
+                  
+                  // Lưu thời gian hết hạn nếu có
+                  if (data.expires_at) {
+                    localStorage.setItem('nordvpn_expires_at', data.expires_at);
+                    setTokenExpiry(new Date(data.expires_at));
+                  }
+                  
+                  setPrivateKey(data.privateKey);
+                  setIsAuthenticated(true);
+                })
+                .catch(err => {
+                  setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
+                })
+                .finally(() => {
+                  setLoading(false);
+                });
+              }} className="space-y-4">
                 <div className="mb-4">
                   <label htmlFor="token" className="block text-sm font-medium mb-1 text-gray-300">
                     Token xác thực
@@ -438,13 +457,13 @@ export default function WireGuardPage() {
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     placeholder="Nhập token xác thực của bạn tại đây"
-                    required
+                    disabled={loading}
                   />
                 </div>
                 
                 <button
                   type="submit"
-                  className="w-full bg-[#f8b700] hover:bg-[#f8b700]/90 text-black font-medium px-4 py-2 rounded-md transition-colors"
+                  className="w-full bg-[#f8b700] hover:bg-[#f8b700]/90 text-black font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={loading}
                 >
                   {loading ? (
