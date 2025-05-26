@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Link from "next/link";
+import { motion } from "framer-motion";
+import StarryBackground from './components/StarryBackground';
 
 export default function Home() {
   const [token, setToken] = useState('');
@@ -53,123 +55,202 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-black">
+    <div className="min-h-screen flex flex-col relative">
+      {/* Background with StarryBackground */}
+      <StarryBackground 
+        starDensity={0.0003}
+        shootingStarMinDelay={2000}
+        shootingStarMaxDelay={8000}
+        shootingStarColor="#ffdd00"
+        shootingStarTrailColor="#4299E1"
+      />
+      
       <Header />
       
-      <main className="flex-grow">
+      <main className="flex-grow relative z-10">
         {/* Hero Section */}
-        <section className="py-20 px-6">
+        <section className="py-20 px-6 relative overflow-hidden">
           <div className="container mx-auto text-center">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              <span className="text-primary">NordVPN</span> API Explorer
-            </h1>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7 }}
+            >
+              <h1 className="text-4xl md:text-6xl font-bold mb-6 text-white">
+                <span className="text-primary">NordVPN</span> API Explorer
+              </h1>
+            </motion.div>
+            
             {token && tokenExpiry && (
-              <div className="text-sm text-gray-400 flex items-center justify-center mb-6">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3, duration: 0.5 }}
+                className="text-sm text-gray-300 flex items-center justify-center mb-6"
+              >
                 <svg className="w-4 h-4 mr-1 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Phiên làm việc còn: <span className="text-primary ml-1">{formatTimeRemaining()}</span>
-              </div>
+              </motion.div>
             )}
-            <p className="text-xl md:text-2xl mb-10 max-w-3xl mx-auto text-gray-300">
+            
+            <motion.p 
+              className="text-xl md:text-2xl mb-10 max-w-3xl mx-auto text-gray-200"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.7 }}
+            >
               Khám phá và quản lý các API của NordVPN để tạo kết nối WireGuard và SOCKS proxy
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/servers" className="btn-primary py-3 px-8 rounded-full font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105">
+            </motion.p>
+            
+            <motion.div 
+              className="flex flex-col sm:flex-row gap-4 justify-center"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4, duration: 0.7 }}
+            >
+              <Link href="/servers" className="btn-primary py-3 px-8 rounded-full font-medium text-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 hover:-translate-y-1">
                 Xem máy chủ
               </Link>
-              <Link href="/wireguard" className="btn-secondary py-3 px-8 rounded-full font-medium text-lg border border-primary hover:bg-primary hover:text-black transition-all duration-200 hover:scale-105">
+              <Link href="/wireguard" className="btn-secondary py-3 px-8 rounded-full font-medium text-lg border border-primary hover:bg-primary hover:text-black transition-all duration-200 hover:scale-105 hover:-translate-y-1">
                 Tạo WireGuard
               </Link>
-            </div>
+            </motion.div>
           </div>
         </section>
 
         {/* Features */}
-        <section className="py-16 px-6 bg-secondary">
+        <section className="py-16 px-6">
           <div className="container mx-auto">
-            <h2 className="text-3xl font-bold mb-12 text-center">
-              <span className="text-primary">Tính năng</span> chính
-            </h2>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+            >
+              <h2 className="text-3xl font-bold mb-12 text-center text-white">
+                <span className="text-primary">Tính năng</span> chính
+              </h2>
+            </motion.div>
+            
             <div className="grid md:grid-cols-3 gap-8">
-              <div className="bg-black p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-black font-bold text-xl">1</div>
-                <h3 className="text-xl font-bold mb-3 text-primary">Danh sách máy chủ</h3>
-                <p className="text-gray-300">
-                  Xem và tìm kiếm danh sách các máy chủ NordVPN với thông tin chi tiết về vị trí, tải và công nghệ
-                </p>
-              </div>
-              <div className="bg-black p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-black font-bold text-xl">2</div>
-                <h3 className="text-xl font-bold mb-3 text-primary">WireGuard Config</h3>
-                <p className="text-gray-300">
-                  Tạo cấu hình WireGuard cho các kết nối VPN tốc độ cao và an toàn với máy chủ NordVPN
-                </p>
-              </div>
-              <div className="bg-black p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
-                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-black font-bold text-xl">3</div>
-                <h3 className="text-xl font-bold mb-3 text-primary">SOCKS Proxy</h3>
-                <p className="text-gray-300">
-                  Tìm và sử dụng các máy chủ proxy SOCKS để tạo kết nối bảo mật cho các ứng dụng và dịch vụ
-                </p>
-              </div>
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                whileHover={{ y: -5 }}
+              >
+                <Link href="/servers" className="block h-full">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-white font-bold text-xl">1</div>
+                  <h3 className="text-xl font-bold mb-3 text-primary">Danh sách máy chủ</h3>
+                  <p className="text-gray-300">
+                    Xem và tìm kiếm danh sách các máy chủ NordVPN với thông tin chi tiết về vị trí, tải và công nghệ
+                  </p>
+                </Link>
+              </motion.div>
+              
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2, duration: 0.5 }}
+                whileHover={{ y: -5 }}
+              >
+                <Link href="/wireguard" className="block h-full">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-white font-bold text-xl">2</div>
+                  <h3 className="text-xl font-bold mb-3 text-primary">WireGuard Config</h3>
+                  <p className="text-gray-300">
+                    Tạo cấu hình WireGuard cho các kết nối VPN tốc độ cao và an toàn với máy chủ NordVPN
+                  </p>
+                </Link>
+              </motion.div>
+              
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.02] border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3, duration: 0.5 }}
+                whileHover={{ y: -5 }}
+              >
+                <Link href="/socks" className="block h-full">
+                  <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center mb-4 text-white font-bold text-xl">3</div>
+                  <h3 className="text-xl font-bold mb-3 text-primary">SOCKS Proxy</h3>
+                  <p className="text-gray-300">
+                    Tìm và sử dụng các máy chủ proxy SOCKS để tạo kết nối bảo mật cho các ứng dụng và dịch vụ
+                  </p>
+                </Link>
+              </motion.div>
             </div>
           </div>
         </section>
 
-        {/* API Overview */}
+        {/* Stats Section */}
         <section className="py-16 px-6">
           <div className="container mx-auto">
-            <h2 className="text-3xl font-bold mb-12 text-center">
-              <span className="text-primary">API</span> NordVPN
-            </h2>
-            <div className="bg-secondary p-6 md:p-8 rounded-lg shadow-lg">
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="border-b border-gray-600">
-                      <th className="py-3 px-4 text-left text-primary">Endpoint</th>
-                      <th className="py-3 px-4 text-left text-primary">Mô tả</th>
-                      <th className="py-3 px-4 text-left text-primary">Yêu cầu xác thực</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700">
-                    <tr className="hover:bg-black/30">
-                      <td className="py-3 px-4 font-mono text-sm text-white">
-                        /v1/users/services/credentials
-                      </td>
-                      <td className="py-3 px-4 text-white">
-                        Lấy thông tin xác thực NordVPN
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="bg-primary text-black px-2 py-1 rounded-full text-xs font-medium">Có</span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-black/30">
-                      <td className="py-3 px-4 font-mono text-sm text-white">
-                        /v1/servers
-                      </td>
-                      <td className="py-3 px-4 text-white">
-                        Lấy danh sách máy chủ NordVPN
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="bg-primary text-black px-2 py-1 rounded-full text-xs font-medium">Không</span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-black/30">
-                      <td className="py-3 px-4 font-mono text-sm text-white">
-                        /v1/servers?filters[servers_technologies][identifier]=socks
-                      </td>
-                      <td className="py-3 px-4 text-white">
-                        Lấy danh sách máy chủ SOCKS
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className="bg-primary text-black px-2 py-1 rounded-full text-xs font-medium">Không</span>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7 }}
+            >
+              <h2 className="text-3xl font-bold mb-12 text-center text-white">
+                <span className="text-primary">Thống kê</span> mạng lưới
+              </h2>
+            </motion.div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg text-center border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1, duration: 0.5 }}
+                whileHover={{ scale: 1.05 }}
+              >
+                <div className="text-4xl font-bold text-primary mb-2">5400+</div>
+                <div className="text-gray-300">Máy chủ</div>
+              </motion.div>
+              
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg text-center border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.2, duration: 0.5 }}
+                whileHover={{ scale: 1.05 }}
+              >
+                <div className="text-4xl font-bold text-primary mb-2">60+</div>
+                <div className="text-gray-300">Quốc gia</div>
+              </motion.div>
+              
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg text-center border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3, duration: 0.5 }}
+                whileHover={{ scale: 1.05 }}
+              >
+                <div className="text-4xl font-bold text-primary mb-2">10 Gbps</div>
+                <div className="text-gray-300">Tốc độ</div>
+              </motion.div>
+              
+              <motion.div 
+                className="bg-black/60 p-6 rounded-lg text-center border border-gray-700/30 backdrop-blur-sm"
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.4, duration: 0.5 }}
+                whileHover={{ scale: 1.05 }}
+              >
+                <div className="text-4xl font-bold text-primary mb-2">24/7</div>
+                <div className="text-gray-300">Hỗ trợ</div>
+              </motion.div>
             </div>
           </div>
         </section>

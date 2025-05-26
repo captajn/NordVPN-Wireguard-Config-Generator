@@ -246,9 +246,7 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
       .filter(server => {
         // Kiểm tra location hợp lệ
         const hasValidLocation = server.locations && server.locations.length > 0;
-        if (!hasValidLocation) {
-          console.log(`Server ${server.name} không có location`);
-        }
+        // Bỏ log không cần thiết
         return hasValidLocation;
       })
       .map(server => {
@@ -257,10 +255,7 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
         const city = location?.city?.name || '';
         const publicKey = findPublicKey(server);
         
-        // Log server không có public key
-        if (!publicKey) {
-          console.log(`Server ${server.name} không có public key`);
-        }
+        // Bỏ log public key
         
         return {
           id: server.id,
@@ -274,9 +269,7 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
       })
       .filter(server => server.publicKey);
 
-    // Log kết quả cuối cùng
-    console.log(`Số server sau khi lọc: ${processedServers.length}`);
-
+    // Log tối thiểu cho mục đích debug
     return {
       success: true,
       data: {

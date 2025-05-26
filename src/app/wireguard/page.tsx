@@ -25,6 +25,8 @@ export default function WireGuardPage() {
   const [privateKey, setPrivateKey] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string>('');
+  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [cities, setCities] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc' | 'name-asc' | 'name-desc' | 'load-med' | 'load-high'>('load-asc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -193,6 +195,26 @@ export default function WireGuardPage() {
     }
   }, [isAuthenticated, fetchServers]);
 
+  // Cập nhật danh sách thành phố khi chọn quốc gia
+  useEffect(() => {
+    if (selectedCountry && servers.length > 0) {
+      // Lọc ra các máy chủ của quốc gia đã chọn
+      const countryServers = servers.filter(server => server.country === selectedCountry);
+      
+      // Lấy danh sách thành phố duy nhất
+      const uniqueCities = [...new Set(countryServers
+        .filter(server => server.city) // Lọc bỏ các server không có thành phố
+        .map(server => server.city))]
+        .sort();
+      
+      setCities(uniqueCities);
+      setSelectedCity(''); // Reset thành phố đã chọn khi đổi quốc gia
+    } else {
+      setCities([]);
+      setSelectedCity('');
+    }
+  }, [selectedCountry, servers]);
+
   // Lọc và sắp xếp danh sách máy chủ khi có thay đổi
   useEffect(() => {
     if (servers.length > 0) {
@@ -201,6 +223,11 @@ export default function WireGuardPage() {
       // Lọc theo quốc gia
       if (selectedCountry) {
         filtered = filtered.filter(server => server.country === selectedCountry);
+        
+        // Lọc theo thành phố nếu đã chọn
+        if (selectedCity) {
+          filtered = filtered.filter(server => server.city === selectedCity);
+        }
       }
       
       // Lọc theo từ khóa tìm kiếm
@@ -234,7 +261,7 @@ export default function WireGuardPage() {
       // Reset trang về 1 khi lọc hoặc sắp xếp lại
       setCurrentPage(1);
     }
-  }, [servers, selectedCountry, searchQuery, sortOption]);
+  }, [servers, selectedCountry, selectedCity, searchQuery, sortOption]);
 
   // Lấy danh sách quốc gia từ API
   useEffect(() => {
@@ -511,6 +538,22 @@ export default function WireGuardPage() {
                       ))}
                     </select>
                   </div>
+                  
+                  {selectedCountry && cities.length > 0 && (
+                    <div className="w-full sm:w-48">
+                      <select
+                        className="w-full px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700]"
+                        value={selectedCity}
+                        onChange={(e) => setSelectedCity(e.target.value)}
+                      >
+                        <option value="">Tất cả thành phố</option>
+                        {cities.map(city => (
+                          <option key={city} value={city}>{city}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
                   <div className="w-full sm:w-64">
                     <input
                       type="text"
@@ -586,7 +629,7 @@ export default function WireGuardPage() {
                               {server.load}% tải
                             </span>
                           </div>
-                          <div className="text-sm text-gray-400 mt-1">{server.country}, {server.city}</div>
+                          <div className="text-sm text-gray-400 mt-1">{server.city ? `${server.city}, ${server.country}` : server.country}</div>
                           <div className="text-xs text-gray-500 mt-0.5 font-mono">{server.hostname}</div>
                         </div>
                         <button

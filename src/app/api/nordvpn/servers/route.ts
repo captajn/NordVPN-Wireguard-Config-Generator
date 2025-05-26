@@ -1,5 +1,26 @@
 import { NextResponse } from 'next/server';
 
+// Định nghĩa kiểu dữ liệu cho cache
+interface CachedResponse {
+  success: boolean;
+  servers: Array<{
+    id: number;
+    name: string;
+    hostname?: string;
+    country: string;
+    city?: string;
+    load: number;
+    publicKey: string;
+  }>;
+  cached: boolean;
+  timestamp: number;
+}
+
+// Bộ nhớ đệm cho servers
+let cachedServers: CachedResponse | null = null;
+let cacheTime: number = 0;
+const CACHE_DURATION = 60 * 60 * 1000; // 1 giờ
+
 // Định nghĩa kiểu dữ liệu
 interface NordVPNTechnology {
   id: number;
@@ -26,9 +47,15 @@ interface NordVPNServer {
     country: {
       name: string;
       id: number;
-    },
-    city?: {
-      name: string;
+      code?: string;
+      city?: {
+        name: string;
+        id?: number;
+        latitude?: number;
+        longitude?: number;
+        dns_name?: string;
+        hub_score?: number;
+      };
     }
   }>;
   technologies: NordVPNTechnology[];
@@ -67,11 +94,18 @@ function findPublicKey(server: NordVPNServer): string {
 
 export async function GET() {
   try {
+    // Kiểm tra cache
+    const now = Date.now();
+    if (cachedServers && (now - cacheTime < CACHE_DURATION)) {
+      // Sử dụng dữ liệu từ cache
+      return NextResponse.json(cachedServers);
+    }
+    
     // Lấy toàn bộ server có hỗ trợ WireGuard với limit cao hơn
     const apiUrl = "https://api.nordvpn.com/v1/servers?limit=7000&filters[servers_technologies]=wireguard_udp";
     
     const response = await fetch(apiUrl, {
-      next: { revalidate: 3600 }, // Cache 1 giờ
+      cache: 'no-store', // Không sử dụng cache của fetch, chúng ta sẽ tự quản lý
       headers: {
         'Accept': 'application/json',
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
@@ -84,29 +118,18 @@ export async function GET() {
     
     const servers: NordVPNServer[] = await response.json();
     
-    // Log để debug
-    console.log(`Tổng số server trước khi lọc: ${servers.length}`);
-    
     // Chuyển đổi và lọc dữ liệu
     const processedServers: ServerInfo[] = servers
       .filter(server => {
         // Kiểm tra location hợp lệ
         const hasValidLocation = server.locations && server.locations.length > 0;
-        if (!hasValidLocation) {
-          console.log(`Server ${server.name} không có location`);
-        }
         return hasValidLocation;
       })
       .map(server => {
         const location = server.locations[0];
         const country = location?.country?.name || 'Unknown';
-        const city = location?.city?.name || '';
+        const city = location?.country?.city?.name || '';
         const publicKey = findPublicKey(server);
-        
-        // Log server không có public key
-        if (!publicKey) {
-          console.log(`Server ${server.name} không có public key`);
-        }
         
         return {
           id: server.id,
@@ -120,22 +143,27 @@ export async function GET() {
       })
       .filter(server => server.publicKey);
     
-    // Log kết quả cuối cùng
-    console.log(`Số server sau khi lọc: ${processedServers.length}`);
-    
     // Nén dữ liệu trước khi gửi về client
     const compressedServers = processedServers.map(server => ({
-      ...server,
-      // Chỉ giữ lại hostname nếu khác name
+      id: server.id,
+      name: server.name,
       hostname: server.hostname !== server.name ? server.hostname : undefined,
-      // Chỉ giữ lại city nếu có giá trị
-      city: server.city || undefined
+      country: server.country,
+      city: server.city || undefined,
+      load: server.load,
+      publicKey: server.publicKey
     }));
     
-    return NextResponse.json({
+    // Lưu vào cache
+    cachedServers = {
       success: true,
-      servers: compressedServers
-    });
+      servers: compressedServers,
+      cached: true,
+      timestamp: now
+    };
+    cacheTime = now;
+    
+    return NextResponse.json(cachedServers);
   } catch (error) {
     console.error('Error fetching servers:', error);
     return NextResponse.json({
