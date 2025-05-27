@@ -4,17 +4,32 @@ import type {
   ApiResponse, 
   NordVPNServer, 
   WireGuardCredentials,
-  NordVPNCountry
+  NordVPNCountry,
+  ServerInfo,
+  NordVPNLocation
 } from '../types';
 
-interface ServerInfo {
+interface NordVPNServerResponse {
   id: number;
   name: string;
   hostname: string;
-  country: string;
-  city: string;
   load: number;
-  publicKey: string;
+  status: string;
+  country: string;
+  city?: string;
+  locations?: NordVPNLocation[];
+  technologies: Array<{
+    id: number;
+    name: string;
+    identifier: string;
+    metadata?: Array<{
+      name: string;
+      value: string;
+    }>;
+    pivot?: {
+      status: string;
+    };
+  }>;
 }
 
 // Định nghĩa các interface cần thiết
@@ -113,29 +128,6 @@ export async function getCredentials(token: string): Promise<ApiResponse<WireGua
       error: error instanceof Error ? error.message : 'Lỗi không xác định',
     };
   }
-}
-
-/**
- * Tìm public key từ metadata của server
- */
-function findPublicKey(server: NordVPNServer): string {
-  for (const tech of server.technologies) {
-    if (tech.identifier === 'wireguard_udp') {
-      // Kiểm tra metadata dạng mảng
-      if (Array.isArray(tech.metadata)) {
-        for (const data of tech.metadata) {
-          if (data.name === 'public_key') {
-            return data.value;
-          }
-        }
-      }
-      // Kiểm tra pivot nếu có
-      if (tech.pivot?.public_key) {
-        return tech.pivot.public_key;
-      }
-    }
-  }
-  return '';
 }
 
 /**
@@ -253,9 +245,14 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
         const location = server.locations[0];
         const country = location?.country?.name || 'Unknown';
         const city = location?.city?.name || '';
-        const publicKey = findPublicKey(server);
         
-        // Bỏ log public key
+        // Định nghĩa kiểu cho technology
+        type Tech = {
+          identifier: string;
+          pivot?: {
+            status?: string;
+          };
+        };
         
         return {
           id: server.id,
@@ -264,10 +261,27 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
           country,
           city,
           load: server.load,
-          publicKey
+          status: (server.status === 'online' ? 'online' : 'offline') as 'online' | 'offline',
+          technologies: [
+            {
+              identifier: 'openvpn_udp',
+              name: 'OpenVPN UDP',
+              status: server.technologies.find((t: Tech) => t.identifier === 'openvpn_udp')?.pivot?.status === 'online' ? 'online' as const : 'offline' as const
+            },
+            {
+              identifier: 'openvpn_tcp',
+              name: 'OpenVPN TCP',
+              status: server.technologies.find((t: Tech) => t.identifier === 'openvpn_tcp')?.pivot?.status === 'online' ? 'online' as const : 'offline' as const
+            },
+            {
+              identifier: 'wireguard',
+              name: 'WireGuard',
+              status: server.technologies.find((t: Tech) => t.identifier === 'wireguard_udp')?.pivot?.status === 'online' ? 'online' as const : 'offline' as const
+            }
+          ]
         };
       })
-      .filter(server => server.publicKey);
+      .filter(server => server.technologies.some(tech => tech.identifier === 'wireguard' && tech.status === 'online'));
 
     // Log tối thiểu cho mục đích debug
     return {
@@ -365,4 +379,105 @@ export async function getWireguardServers(params?: Omit<ServerParams, 'filters'>
     ...params, 
     filters: { 'servers_technologies][identifier': 'wireguard_udp' }
   });
+}
+
+/**
+ * Lấy danh sách máy chủ OpenVPN
+ */
+export async function getOpenVPNServers(params?: Omit<ServerParams, 'filters'>): Promise<ApiResponse<{ servers: ServerInfo[], total: number }>> {
+  return getServers({
+    ...params, 
+    filters: { 'servers_technologies][identifier': 'openvpn_udp' }
+  });
+}
+
+/**
+ * Lấy danh sách máy chủ được đề xuất từ API NordVPN
+ * @param params Tham số tìm kiếm và lọc
+ */
+export async function getRecommendedServers({ countryId, noCache = false }: { countryId?: string; noCache?: boolean }): Promise<ServerInfo[]> {
+  try {
+    const params = new URLSearchParams();
+    params.append('limit', '100');
+    if (countryId) {
+      params.append('filters[country_id]', countryId);
+    }
+
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+      'Origin': 'https://nordvpn.com',
+      'Referer': 'https://nordvpn.com/',
+      'sec-ch-ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+      'sec-ch-ua-mobile': '?0',
+      'sec-ch-ua-platform': '"Windows"',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin'
+    };
+
+    if (noCache) {
+      headers['Cache-Control'] = 'no-cache';
+      headers['Pragma'] = 'no-cache';
+    }
+
+    const response = await fetch(`https://api.nordvpn.com/v1/servers/recommendations?${params.toString()}`, {
+      headers,
+      cache: noCache ? 'no-store' : 'default'
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Chuyển đổi dữ liệu từ API sang định dạng ServerInfo
+    const servers = (data as NordVPNServerResponse[]).map((server): ServerInfo => ({
+      id: server.id,
+      name: server.name,
+      hostname: server.hostname,
+      load: server.load,
+      status: server.status === 'online' ? 'online' : 'offline',
+      country: server.country,
+      city: server.city || '',
+      locations: server.locations || [],
+      technologies: [
+        {
+          identifier: 'openvpn_udp',
+          name: 'OpenVPN UDP',
+          status: server.technologies.find(t => t.identifier === 'openvpn_udp')?.pivot?.status === 'online' ? 'online' : 'offline'
+        },
+        {
+          identifier: 'openvpn_tcp',
+          name: 'OpenVPN TCP',
+          status: server.technologies.find(t => t.identifier === 'openvpn_tcp')?.pivot?.status === 'online' ? 'online' : 'offline'
+        },
+        {
+          identifier: 'wireguard',
+          name: 'WireGuard',
+          status: server.technologies.find(t => t.identifier === 'wireguard_udp')?.pivot?.status === 'online' ? 'online' : 'offline'
+        }
+      ]
+    }));
+    
+    // Thêm thông tin thành phố từ locations nếu có
+    servers.forEach(server => {
+      if (server.locations && server.locations.length > 0) {
+        const location = server.locations[0];
+        if (location.country) {
+          server.country = location.country.name || server.country;
+          
+          if (location.country.city) {
+            server.city = location.country.city.name || server.city;
+          }
+        }
+      }
+    });
+    
+    return servers;
+  } catch (error) {
+    console.error('Error fetching recommended servers:', error);
+    throw error;
+  }
 } 

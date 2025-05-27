@@ -17,7 +17,16 @@ const nextConfig = {
 
   // Cấu hình môi trường
   poweredByHeader: false,
-  reactStrictMode: true
+  reactStrictMode: true,
+
+  // Cho phép import JSON
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.json$/,
+      type: 'json'
+    });
+    return config;
+  }
 }
 
 module.exports = nextConfig 

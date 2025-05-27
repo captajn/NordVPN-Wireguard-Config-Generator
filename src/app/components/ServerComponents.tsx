@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import debounce from 'lodash/debounce';
 import type { ServerInfo } from '../types';
@@ -24,6 +24,12 @@ export function ServerFilters({ currentSearch, countries, currentCountry, curren
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [searchValue, setSearchValue] = useState(currentSearch);
+  
+  // Tìm tên quốc gia từ ID
+  const getCountryNameById = useCallback((id: string) => {
+    const country = countries.find(c => c.id === id);
+    return country ? country.name : '';
+  }, [countries]);
   
   const debouncedSearchRef = useRef(
     debounce((value: string) => {
@@ -67,18 +73,28 @@ export function ServerFilters({ currentSearch, countries, currentCountry, curren
   const handleCountryChange = useCallback((value: string) => {
     const url = new URL(window.location.href);
     if (value) {
-      url.searchParams.set('country', value);
+      const selectedCountry = countries.find(c => c.id === value);
+      if (selectedCountry) {
+        // Lưu cả id và name của quốc gia
+        url.searchParams.set('country', value);
+        url.searchParams.set('country_name', encodeURIComponent(selectedCountry.name));
+      } else {
+        url.searchParams.set('country', value);
+      }
     } else {
       url.searchParams.delete('country');
+      url.searchParams.delete('country_name');
     }
+    
     // Giữ nguyên tham số load nếu đã có
     if (currentLoad) {
       url.searchParams.set('load', currentLoad);
     }
+    
     startTransition(() => {
       router.push(url.toString());
     });
-  }, [router, startTransition, currentLoad]);
+  }, [router, startTransition, currentLoad, countries]);
 
   // Xử lý khi thay đổi checkbox tải
   const handleLoadChange = useCallback((checked: boolean) => {
@@ -91,11 +107,17 @@ export function ServerFilters({ currentSearch, countries, currentCountry, curren
     // Giữ nguyên tham số country nếu đã có
     if (currentCountry) {
       url.searchParams.set('country', currentCountry);
+      
+      // Giữ lại country_name nếu đã có
+      const countryName = getCountryNameById(currentCountry);
+      if (countryName) {
+        url.searchParams.set('country_name', encodeURIComponent(countryName));
+      }
     }
     startTransition(() => {
       router.push(url.toString());
     });
-  }, [router, startTransition, currentCountry]);
+  }, [router, startTransition, currentCountry, getCountryNameById]);
 
   return (
     <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row gap-2 sm:gap-4 items-center">
@@ -212,29 +234,22 @@ export function ServerListSkeleton() {
 // ===== SERVER LIST COMPONENT =====
 interface ServerListProps {
   servers: ServerInfo[];
-  params: {
-    page: string;
-    country: string;
-    sort: string;
-    search: string;
-  };
   error: string | null;
 }
 
-// Dùng React.memo để tránh re-renders không cần thiết
-const ServerList = memo(function ServerList({ servers, params, error }: ServerListProps) {
+function ServerList({ servers, error }: ServerListProps) {
   if (error) {
     return (
-      <div className="p-4 sm:p-6 md:p-8 text-center text-white">
-        <p className="text-red-500">Lỗi: {error}</p>
+      <div className="p-4 sm:p-6 md:p-8">
+        <p className="text-red-500 text-center">{error}</p>
       </div>
     );
   }
 
   if (!servers || servers.length === 0) {
     return (
-      <div className="p-4 sm:p-6 md:p-8 text-center text-white">
-        <p>Không có máy chủ nào phù hợp với bộ lọc.</p>
+      <div className="p-4 sm:p-6 md:p-8">
+        <p className="text-gray-400 text-center">Không tìm thấy máy chủ nào.</p>
       </div>
     );
   }
@@ -242,89 +257,75 @@ const ServerList = memo(function ServerList({ servers, params, error }: ServerLi
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-[#2d3748]">
-        <thead className="bg-[#121827]">
-          <tr>
-            <th scope="col" className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              Tên
+        <thead>
+          <tr className="bg-[#1a1f2e]">
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Máy chủ
             </th>
-            <th scope="col" className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              Quốc gia / Thành phố
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Vị trí
             </th>
-            <th scope="col" className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              <div className="flex items-center gap-2">
-                <span>Tải</span>
-                <div className="flex flex-col">
-                  <a
-                    href={`/servers?${new URLSearchParams({ ...params, sort: 'load_asc' })}`}
-                    className="hover:text-[#f8b700]"
-                  >
-                    ▲
-                  </a>
-                  <a
-                    href={`/servers?${new URLSearchParams({ ...params, sort: 'load_desc' })}`}
-                    className="hover:text-[#f8b700]"
-                  >
-                    ▼
-                  </a>
-                </div>
-              </div>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Tải
             </th>
-            <th scope="col" className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 text-left text-[10px] sm:text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-              IP
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Trạng thái
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+              Công nghệ hỗ trợ
             </th>
           </tr>
         </thead>
-        <tbody className="bg-[#1f2937] divide-y divide-[#2d3748]">
-          {servers.map(server => (
-            <ServerRow key={server.id} server={server} />
+        <tbody className="divide-y divide-[#2d3748]">
+          {servers.map((server) => (
+            <tr key={server.id} className="hover:bg-[#1a1f2e]">
+              <td className="px-4 py-3 whitespace-nowrap">
+                <div>
+                  <div className="text-sm font-medium text-white">{server.name}</div>
+                  <div className="text-xs text-gray-400 font-mono">{server.hostname}</div>
+                </div>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <div className="text-sm text-white">
+                  {server.city ? `${server.city}, ${server.country}` : server.country}
+                </div>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  server.load < 30 ? 'bg-green-500/10 text-green-400' :
+                  server.load < 70 ? 'bg-yellow-500/10 text-yellow-400' :
+                  'bg-red-500/10 text-red-400'
+                }`}>
+                  {server.load}%
+                </span>
+              </td>
+              <td className="px-4 py-3 whitespace-nowrap">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  server.status === 'online' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+                }`}>
+                  {server.status === 'online' ? 'Online' : 'Offline'}
+                </span>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap gap-1">
+                  {server.technologies.map((tech) => (
+                    <span 
+                      key={tech.identifier}
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium
+                        ${tech.status === 'online' ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-400'}
+                      `}
+                    >
+                      {tech.name}
+                    </span>
+                  ))}
+                </div>
+              </td>
+            </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
-});
-
-const ServerRow = memo(function ServerRow({ server }: { server: ServerInfo }) {
-  return (
-    <tr className="hover:bg-[#2d3748] transition-colors duration-200">
-      <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        <span className="text-white">{server.name}</span>
-      </td>
-      <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        <div>
-          <span className="text-white">{server.country}</span>
-          {server.city && (
-            <span className="text-gray-400 text-xs ml-1">({server.city})</span>
-          )}
-        </div>
-      </td>
-      <td className="py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        <LoadIndicator load={server.load} />
-      </td>
-      <td className="hidden sm:table-cell py-2 px-2 sm:py-3 sm:px-4 md:px-6 whitespace-nowrap">
-        <span className="text-gray-400 text-xs font-mono">{server.hostname}</span>
-      </td>
-    </tr>
-  );
-});
-
-// Component hiển thị thanh tải
-const LoadIndicator = memo(function LoadIndicator({ load }: { load: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-        <div 
-          className={`h-full ${
-            load < 30 ? 'bg-green-500' : 
-            load < 70 ? 'bg-yellow-500' : 
-            'bg-red-500'
-          }`}
-          style={{ width: `${load}%` }}
-        ></div>
-      </div>
-      <span className="text-white text-xs sm:text-sm md:text-base whitespace-nowrap">{load}%</span>
-    </div>
-  );
-});
+}
 
 export { ServerList }; 

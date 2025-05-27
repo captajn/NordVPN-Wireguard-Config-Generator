@@ -93,11 +93,54 @@ export interface WireGuardConfig {
   persistentKeepalive: number;
 }
 
+// OpenVPN Protocol Types
+export type OpenVPNProtocol = 
+  | 'openvpn_udp'
+  | 'openvpn_tcp'
+  | 'openvpn_xor_udp'
+  | 'openvpn_xor_tcp'
+  | 'openvpn_udp_tls_crypt'
+  | 'openvpn_tcp_tls_crypt';
+
+// OpenVPN Credentials
+export interface OpenVPNCredentials {
+  username: string;
+  password: string;
+  expires_at: string;
+  created_at: string;
+}
+
+// Server Info
+export interface ServerInfo {
+  id: number;
+  name: string;
+  hostname: string;
+  country: string;
+  city: string;
+  load: number;
+}
+
+// OpenVPN Server Info
+export interface OpenVPNServerInfo extends ServerInfo {
+  protocol: OpenVPNProtocol;
+}
+
+// OpenVPN Config
+export interface OpenVPNConfig {
+  username: string;
+  password: string;
+  protocol: string;
+  hostname: string;
+  port: number;
+}
+
 // API Response Types
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+  cached?: boolean;
+  timestamp?: number;
 }
 
 // API Error

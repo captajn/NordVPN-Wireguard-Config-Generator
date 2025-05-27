@@ -7,6 +7,15 @@ import Image from 'next/image';
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('nordvpn_token');
+      localStorage.removeItem('nordvpn_private_key');
+      localStorage.removeItem('nordvpn_expires_at');
+      window.location.reload();
+    }
+  };
+
   return (
     <header className="bg-black py-4 px-6 shadow-md relative z-20">
       <div className="container mx-auto flex justify-between items-center">
@@ -30,7 +39,9 @@ export default function Header() {
           <Link href="/wireguard" className="text-white hover:text-primary transition-colors font-medium text-lg">
             WireGuard
           </Link>
-          
+          <Link href="/openvpn" className="text-white hover:text-primary transition-colors font-medium text-lg">
+            Open VPN
+          </Link>
           {/* Logo in the middle for desktop */}
           <Link href="/" className="flex items-center mx-4">
             <Image 
@@ -42,13 +53,18 @@ export default function Header() {
               className="mr-2"
             />
           </Link>
-          
           <Link href="/servers" className="text-white hover:text-primary transition-colors font-medium text-lg">
             Máy chủ
           </Link>
           <Link href="/socks" className="text-white hover:text-primary transition-colors font-medium text-lg">
             SOCKS
           </Link>
+          <button
+            onClick={handleLogout}
+            className="text-white hover:text-primary transition-colors font-medium text-lg"
+          >
+            Đăng xuất
+          </button>
         </nav>
 
         {/* Mobile Menu Button */}
@@ -93,12 +109,25 @@ export default function Header() {
             WireGuard
           </Link>
           <Link 
+            href="/openvpn" 
+            className="block px-6 py-3 text-white hover:bg-primary hover:text-black font-medium"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            Open VPN
+          </Link>
+          <Link 
             href="/socks" 
             className="block px-6 py-3 text-white hover:bg-primary hover:text-black font-medium"
             onClick={() => setIsMenuOpen(false)}
           >
             SOCKS
           </Link>
+          <button
+            onClick={handleLogout}
+            className="block w-full text-left px-6 py-3 text-white hover:bg-primary hover:text-black font-medium"
+          >
+            Đăng xuất
+          </button>
         </div>
       )}
     </header>

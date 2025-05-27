@@ -1,126 +1,84 @@
 'use client';
 
-import Link from 'next/link';
-
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
-  searchParams: {
-    page?: string;
-    country?: string;
-    technology?: string;
-    load?: string;
-  };
+  onPageChange: (page: number) => void;
 }
 
-export default function Pagination({ currentPage, totalPages, searchParams }: PaginationProps) {
-  // Tạo mảng các số trang để hiển thị
-  const pageNumbers = [];
-  
-  // Tính toán các trang cần hiển thị
-  const maxPagesToShow = 5;
-  let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-  const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-  
-  // Điều chỉnh lại startPage nếu endPage đã đạt giới hạn
-  startPage = Math.max(1, endPage - maxPagesToShow + 1);
-  
-  // Tạo mảng các số trang
-  for (let i = startPage; i <= endPage; i++) {
-    pageNumbers.push(i);
-  }
-
-  // Hàm tạo URL cho từng trang
-  const createPageUrl = (page: number) => {
-    const params = new URLSearchParams();
-    
-    if (page > 1) {
-      params.set('page', page.toString());
-    }
-    
-    if (searchParams.country) {
-      params.set('country', searchParams.country);
-    }
-    
-    if (searchParams.technology) {
-      params.set('technology', searchParams.technology);
-    }
-    
-    if (searchParams.load) {
-      params.set('load', searchParams.load);
-    }
-    
-    const queryString = params.toString();
-    return queryString ? `?${queryString}` : '';
+export default function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange
+}: PaginationProps) {
+  const goToPage = (page: number) => {
+    if (page < 1) page = 1;
+    if (page > totalPages) page = totalPages;
+    onPageChange(page);
   };
 
+  const goToPreviousPage = () => {
+    if (currentPage > 1) {
+      onPageChange(currentPage - 1);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      onPageChange(currentPage + 1);
+    }
+  };
+
+  if (totalPages <= 1) return null;
+
   return (
-    <div className="flex justify-center mt-6">
+    <div className="mt-6 flex justify-center">
       <nav className="flex items-center space-x-1">
-        {/* Previous button */}
-        {currentPage > 1 && (
-          <Link
-            href={createPageUrl(currentPage - 1)}
-            className="px-3 py-2 rounded-md text-sm font-medium bg-[#1f2937] text-white hover:bg-[#2d3748] transition-colors"
-          >
-            &laquo;
-          </Link>
-        )}
+        <button
+          onClick={goToPreviousPage}
+          disabled={currentPage === 1}
+          className="p-2 rounded-md bg-[#121827] text-white hover:bg-[#2d3748] disabled:opacity-50"
+        >
+          &laquo;
+        </button>
         
-        {/* First page if not in view */}
-        {startPage > 1 && (
-          <>
-            <Link
-              href={createPageUrl(1)}
-              className="px-3 py-2 rounded-md text-sm font-medium bg-[#1f2937] text-white hover:bg-[#2d3748] transition-colors"
-            >
-              1
-            </Link>
-            {startPage > 2 && (
-              <span className="px-3 py-2 text-gray-500">...</span>
-            )}
-          </>
-        )}
+        {[...Array(totalPages)].map((_, i) => {
+          const pageNumber = i + 1;
+          if (
+            pageNumber === 1 ||
+            pageNumber === totalPages ||
+            (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+          ) {
+            return (
+              <button
+                key={pageNumber}
+                onClick={() => goToPage(pageNumber)}
+                className={`w-8 h-8 rounded-md text-sm ${
+                  currentPage === pageNumber
+                    ? 'bg-[#f8b700] text-black'
+                    : 'bg-[#121827] text-white hover:bg-[#2d3748]'
+                }`}
+              >
+                {pageNumber}
+              </button>
+            );
+          }
+          if (
+            pageNumber === currentPage - 2 ||
+            pageNumber === currentPage + 2
+          ) {
+            return <span key={pageNumber} className="text-gray-500">...</span>;
+          }
+          return null;
+        })}
         
-        {/* Page numbers */}
-        {pageNumbers.map(number => (
-          <Link
-            key={number}
-            href={createPageUrl(number)}
-            className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              number === currentPage
-                ? 'bg-[#f8b700] text-black'
-                : 'bg-[#1f2937] text-white hover:bg-[#2d3748]'
-            }`}
-          >
-            {number}
-          </Link>
-        ))}
-        
-        {/* Last page if not in view */}
-        {endPage < totalPages && (
-          <>
-            {endPage < totalPages - 1 && (
-              <span className="px-3 py-2 text-gray-500">...</span>
-            )}
-            <Link
-              href={createPageUrl(totalPages)}
-              className="px-3 py-2 rounded-md text-sm font-medium bg-[#1f2937] text-white hover:bg-[#2d3748] transition-colors"
-            >
-              {totalPages}
-            </Link>
-          </>
-        )}
-        
-        {/* Next button */}
-        {currentPage < totalPages && (
-          <Link
-            href={createPageUrl(currentPage + 1)}
-            className="px-3 py-2 rounded-md text-sm font-medium bg-[#1f2937] text-white hover:bg-[#2d3748] transition-colors"
-          >
-            &raquo;
-          </Link>
-        )}
+        <button
+          onClick={goToNextPage}
+          disabled={currentPage === totalPages}
+          className="p-2 rounded-md bg-[#121827] text-white hover:bg-[#2d3748] disabled:opacity-50"
+        >
+          &raquo;
+        </button>
       </nav>
     </div>
   );

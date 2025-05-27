@@ -3,8 +3,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import Header from "../components/Header";
 import Footer from "../components/Footer";
-import { getSocksServers } from "../services/api";
-import type { NordVPNServer } from "../types";
+import { NordVPNServer } from '../types';
+
+interface Country {
+  id: number;
+  name: string;
+  code: string;
+}
+
+interface Credentials {
+  username: string;
+  password: string;
+}
 
 export default function SocksPage() {
   const [servers, setServers] = useState<NordVPNServer[]>([]);
@@ -17,11 +27,12 @@ export default function SocksPage() {
   
   // Thêm state cho việc lọc và sắp xếp
   const [selectedCountry, setSelectedCountry] = useState<string>('');
-  const [countries, setCountries] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc' | 'name-asc' | 'name-desc'>('load-asc');
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc'>('load-asc');
   const [filteredServers, setFilteredServers] = useState<NordVPNServer[]>([]);
-  const [countriesData, setCountriesData] = useState<Array<{id: number, name: string}>>([]);
+  
+  // Trong component
+  const [credentials, setCredentials] = useState<Credentials | null>(null);
   
   // Sắp xếp danh sách máy chủ
   const sortServers = useCallback((serverList: NordVPNServer[], sort: string) => {
@@ -32,10 +43,6 @@ export default function SocksPage() {
         return sorted.sort((a, b) => a.load - b.load);
       case 'load-desc':
         return sorted.sort((a, b) => b.load - a.load);
-      case 'name-asc':
-        return sorted.sort((a, b) => a.hostname.localeCompare(b.hostname));
-      case 'name-desc':
-        return sorted.sort((a, b) => b.hostname.localeCompare(a.hostname));
       default:
         return sorted;
     }
@@ -45,25 +52,54 @@ export default function SocksPage() {
   const fetchSocksServers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getSocksServers({
-        revalidateSeconds: 60 // Cache 1 phút
-      });
+      const response = await fetch('/api/nordvpn/socks');
+      const data = await response.json();
       
-      if (response.success && response.data) {
-        const serverList = response.data.servers;
+      console.log('Debug - API Response:', data); // Debug log
+      console.log('Debug - Credentials from API:', data.credentials); // Thêm debug để kiểm tra mật khẩu
+
+      if (data.success) {
+        const serverList = data.servers as NordVPNServer[];
         setServers(serverList);
+        
+        // Lưu credentials từ API response
+        if (data.credentials) {
+          setCredentials(data.credentials);
+          setUsername(data.credentials.username);
+          setPassword(data.credentials.password);
+          setIsAuthenticated(true);
+          
+          console.log('Debug - Credentials set in state:', {
+            username: data.credentials.username,
+            password: data.credentials.password,
+            passwordLength: data.credentials.password?.length,
+          });
+        }
+
+        // Xử lý danh sách quốc gia từ máy chủ trả về
+        const countryMap = new Map<number, Country>();
+        
+        serverList.forEach((server: NordVPNServer) => {
+          const country = server.locations[0]?.country;
+          if (country && country.id) {
+            countryMap.set(country.id, {
+              id: country.id,
+              name: country.name,
+              code: country.code
+            });
+          }
+        });
+
+        const uniqueCountries = Array.from(countryMap.values())
+          .sort((a, b) => a.name.localeCompare(b.name));
+        
+        setCountries(uniqueCountries);
         setFilteredServers(sortServers(serverList, sortOption));
-        
-        // Tạo danh sách quốc gia từ máy chủ
-        const uniqueCountries = Array.from(new Set(
-          serverList.map(server => server.locations[0]?.country?.name)
-        )).filter(Boolean) as string[];
-        
-        setCountries(uniqueCountries.sort());
       } else {
-        setError(response.error || 'Lỗi không xác định');
+        setError(data.error || 'Lỗi không xác định');
       }
     } catch (err) {
+      console.error('Debug - Error:', err);
       setError(err instanceof Error ? err.message : 'Lỗi không xác định');
     } finally {
       setLoading(false);
@@ -74,8 +110,8 @@ export default function SocksPage() {
     // Kiểm tra xem có token đã lưu không
     const savedToken = localStorage.getItem('nordvpn_token');
     
-    // Nếu có token, lấy thông tin username và password từ localStorage nếu có
     if (savedToken) {
+      // Nếu có token, lấy thông tin username và password từ localStorage nếu có
       const savedUsername = localStorage.getItem('nordvpn_username');
       const savedPassword = localStorage.getItem('nordvpn_password');
       
@@ -83,40 +119,22 @@ export default function SocksPage() {
         setUsername(savedUsername);
         setPassword(savedPassword);
         setIsAuthenticated(true);
+        console.log('Debug - Loaded credentials from localStorage:', {
+          username: savedUsername,
+          passwordLength: savedPassword?.length || 0
+        });
       } else {
         // Nếu không có thông tin đăng nhập trong localStorage, lấy từ API
+        console.log('Debug - No saved credentials, fetching from API using token');
         fetchUserCredentials(savedToken);
       }
+    } else {
+      console.log('Debug - No saved token found');
     }
     
     // Lấy danh sách máy chủ SOCKS
     fetchSocksServers();
-    
-    // Lấy danh sách quốc gia
-    fetchCountries();
   }, [fetchSocksServers]);
-  
-  // Lấy danh sách quốc gia từ API
-  const fetchCountries = async () => {
-    try {
-      const response = await fetch('/api/nordvpn/countries');
-      const data = await response.json();
-      
-      if (data.success && data.countries) {
-        setCountriesData(data.countries);
-      }
-    } catch (err) {
-      console.error('Lỗi khi lấy danh sách quốc gia:', err);
-    }
-  };
-  
-  // Cập nhật danh sách quốc gia khi có dữ liệu từ API
-  useEffect(() => {
-    if (countriesData.length > 0) {
-      const uniqueCountries = countriesData.map(country => country.name).sort();
-      setCountries(uniqueCountries);
-    }
-  }, [countriesData]);
   
   // Lọc và sắp xếp danh sách máy chủ khi có thay đổi
   useEffect(() => {
@@ -126,17 +144,7 @@ export default function SocksPage() {
       // Lọc theo quốc gia
       if (selectedCountry) {
         filtered = filtered.filter(server => 
-          server.locations[0]?.country.name === selectedCountry
-        );
-      }
-      
-      // Lọc theo từ khóa tìm kiếm
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        filtered = filtered.filter(server => 
-          server.hostname.toLowerCase().includes(query) ||
-          (server.locations[0]?.country.name && 
-           server.locations[0].country.name.toLowerCase().includes(query))
+          server.locations[0]?.country?.name === selectedCountry
         );
       }
       
@@ -145,7 +153,7 @@ export default function SocksPage() {
       
       setFilteredServers(filtered);
     }
-  }, [servers, selectedCountry, searchQuery, sortOption, sortServers]);
+  }, [servers, selectedCountry, sortOption, sortServers]);
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,7 +165,7 @@ export default function SocksPage() {
       setIsAuthenticated(true);
     }
   };
-  
+
   const downloadProxies = () => {
     if (!username || !password) {
       setError('Vui lòng nhập tên người dùng và mật khẩu');
@@ -189,23 +197,30 @@ export default function SocksPage() {
     URL.revokeObjectURL(url);
   };
 
-  const fetchUserCredentials = async (token: string) => {
+  const fetchUserCredentials = async (userToken: string) => {
     try {
       setLoadingCredentials(true);
+      console.log('Debug - Fetching user credentials with token');
       
       const response = await fetch('/api/nordvpn/user', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token: userToken }),
       });
       
       const data = await response.json();
+      console.log('Debug - User API response status:', response.status);
       
       if (!response.ok) {
         throw new Error(data.error || 'Không thể lấy thông tin đăng nhập');
       }
+      
+      console.log('Debug - User API response data:', {
+        username: data.username,
+        passwordLength: data.password?.length || 0
+      });
       
       if (data.username && data.password) {
         setUsername(data.username);
@@ -215,6 +230,8 @@ export default function SocksPage() {
         // Lưu thông tin đăng nhập vào localStorage
         localStorage.setItem('nordvpn_username', data.username);
         localStorage.setItem('nordvpn_password', data.password);
+        
+        console.log('Debug - Credentials saved to localStorage');
       }
     } catch (err) {
       console.error('Lỗi khi lấy thông tin đăng nhập:', err);
@@ -222,6 +239,90 @@ export default function SocksPage() {
     } finally {
       setLoadingCredentials(false);
     }
+  };
+
+  // Thay thế phần table bằng cards
+  const renderServerList = () => {
+    if (loading) {
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="bg-[#1a1f2e] rounded-lg p-4 animate-pulse">
+              <div className="h-6 bg-[#2d3748] rounded w-3/4 mb-4"></div>
+              <div className="h-4 bg-[#2d3748] rounded w-1/2 mb-2"></div>
+              <div className="h-4 bg-[#2d3748] rounded w-2/3"></div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-6">
+        {filteredServers.map((server) => {
+          const city = server.locations[0]?.country?.city?.name || '';
+          const country = server.locations[0]?.country?.name || 'Unknown';
+          
+          return (
+            <div key={server.id} className="bg-[#1a1f2e] rounded-lg p-4 border border-[#2d3748] hover:border-[#f8b700] transition-colors">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-white font-medium truncate" title={server.name}>{server.name}</h3>
+                <div className="flex items-center">
+                  <div className="w-12 bg-[#2d3748] rounded-full h-2 mr-1">
+                    <div 
+                      className={`h-2 rounded-full ${
+                        server.load < 30 ? 'bg-green-500' : 
+                        server.load < 70 ? 'bg-yellow-500' : 
+                        'bg-red-500'
+                      }`} 
+                      style={{ width: `${server.load}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-gray-400 text-xs">{server.load}%</span>
+                </div>
+              </div>
+              
+              <p className="text-gray-400 text-sm mb-2">
+                {city ? `${city}, ${country}` : country}
+              </p>
+              
+              <p className="text-gray-400 text-xs mb-2 truncate" title={server.hostname}>
+                {server.hostname}
+              </p>
+              
+              <div className="flex justify-between text-xs mb-3">
+                <span className="text-gray-400">Status:</span>
+                <span className={`${server.status === 'online' ? 'text-green-400' : 'text-red-400'}`}>
+                  {server.status}
+                </span>
+              </div>
+
+              <button
+                onClick={() => {
+                  const proxyInfo = `${server.hostname}:1080:${username}:${credentials?.password || password}`;
+                  const blob = new Blob([proxyInfo], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `proxy_${server.hostname}.txt`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full mt-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded hover:bg-blue-700 transition-colors flex items-center justify-center gap-1"
+                disabled={!username || !password}
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Tải proxy
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -236,7 +337,7 @@ export default function SocksPage() {
           
           {/* Form đăng nhập và tải xuống proxy */}
           <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748] mb-8">
-            <h2 className="text-xl font-semibold p-6 border-b border-[#2d3748]">Tải xuống danh sách proxy</h2>
+            <h2 className="text-xl font-semibold p-6 border-b border-[#2d3748]">Thông tin đăng nhập SOCKS</h2>
             
             {error && (
               <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
@@ -257,9 +358,8 @@ export default function SocksPage() {
                       className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Nhập tên người dùng NordVPN"}
-                      required
-                      disabled={loadingCredentials}
+                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Tên người dùng SOCKS"}
+                      readOnly={loadingCredentials}
                     />
                   </div>
                   <div>
@@ -267,14 +367,13 @@ export default function SocksPage() {
                       Mật khẩu SOCKS
                     </label>
                     <input
-                      type="password"
+                      type="text" // Đổi thành text để hiển thị password
                       id="password"
                       className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Nhập mật khẩu NordVPN"}
-                      required
-                      disabled={loadingCredentials}
+                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Mật khẩu SOCKS"}
+                      readOnly={loadingCredentials}
                     />
                   </div>
                 </div>
@@ -314,11 +413,11 @@ export default function SocksPage() {
 
           {/* Bộ lọc và danh sách máy chủ */}
           <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748]">
-            <div className="p-6 border-b border-[#2d3748]">
-              <div className="grid md:grid-cols-2 gap-4 mb-4">
-                <div>
+            <div className="p-4 border-b border-[#2d3748]">
+              <div className="flex flex-col md:flex-row gap-3 items-center">
+                <div className="w-full md:w-1/2">
                   <label htmlFor="country" className="block text-sm font-medium mb-1 text-gray-300">
-                    Quốc gia
+                    Lọc Quốc Gia
                   </label>
                   <select
                     id="country"
@@ -328,135 +427,42 @@ export default function SocksPage() {
                     disabled={loading}
                   >
                     <option value="">Tất cả quốc gia</option>
-                    {countries.map(country => (
-                      <option key={country} value={country}>{country}</option>
+                    {countries.map((country) => (
+                      <option key={country.id} value={country.name}>
+                        {country.name}
+                      </option>
                     ))}
                   </select>
                 </div>
                 
-                <div>
-                  <label htmlFor="search" className="block text-sm font-medium mb-1 text-gray-300">
-                    Tìm kiếm
+                <div className="w-full md:w-1/2">
+                  <label htmlFor="sort" className="block text-sm font-medium mb-1 text-gray-300">
+                    Lọc Theo % Tải
                   </label>
-                  <input
-                    type="text"
-                    id="search"
+                  <select
+                    id="sort"
                     className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Tìm theo tên máy chủ hoặc quốc gia"
+                    value={sortOption}
+                    onChange={(e) => setSortOption(e.target.value as 'load-asc' | 'load-desc')}
                     disabled={loading}
-                  />
+                  >
+                    <option value="load-asc">Tải thấp nhất</option>
+                    <option value="load-desc">Tải cao nhất</option>
+                  </select>
                 </div>
-              </div>
-              
-              <div className="flex flex-wrap gap-2">
-                <span className="text-sm text-gray-400">Sắp xếp theo:</span>
-                <button 
-                  type="button"
-                  className={`py-1 px-3 text-xs rounded transition-all duration-200 ${sortOption === 'load-asc' ? 'bg-[#f8b700] text-black' : 'bg-[#1a1f2e] text-white hover:bg-[#2d3748]'}`}
-                  onClick={() => setSortOption('load-asc')}
-                >
-                  Tải thấp nhất
-                </button>
-                <button 
-                  type="button"
-                  className={`py-1 px-3 text-xs rounded transition-all duration-200 ${sortOption === 'load-desc' ? 'bg-[#f8b700] text-black' : 'bg-[#1a1f2e] text-white hover:bg-[#2d3748]'}`}
-                  onClick={() => setSortOption('load-desc')}
-                >
-                  Tải cao nhất
-                </button>
-                <button 
-                  type="button"
-                  className={`py-1 px-3 text-xs rounded transition-all duration-200 ${sortOption === 'name-asc' ? 'bg-[#f8b700] text-black' : 'bg-[#1a1f2e] text-white hover:bg-[#2d3748]'}`}
-                  onClick={() => setSortOption('name-asc')}
-                >
-                  Tên A-Z
-                </button>
-                <button 
-                  type="button"
-                  className={`py-1 px-3 text-xs rounded transition-all duration-200 ${sortOption === 'name-desc' ? 'bg-[#f8b700] text-black' : 'bg-[#1a1f2e] text-white hover:bg-[#2d3748]'}`}
-                  onClick={() => setSortOption('name-desc')}
-                >
-                  Tên Z-A
-                </button>
               </div>
             </div>
 
-            {/* Bảng danh sách máy chủ */}
-            {loading ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#f8b700]"></div>
-              </div>
-            ) : error ? (
+            {error ? (
               <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
                 <p>{error}</p>
               </div>
+            ) : filteredServers.length === 0 ? (
+              <div className="p-6 text-center text-gray-400">
+                {loading ? 'Đang tải danh sách máy chủ...' : 'Không tìm thấy máy chủ nào phù hợp với bộ lọc'}
+              </div>
             ) : (
-              <>
-                {filteredServers.length === 0 ? (
-                  <div className="p-6 text-center text-gray-400">
-                    Không tìm thấy máy chủ nào phù hợp với bộ lọc
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-[#1a1f2e]">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-                            Máy chủ
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-                            Quốc gia
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-                            Tải
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-                            IP
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-[#f8b700] uppercase tracking-wider">
-                            Cổng
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#2d3748]">
-                        {filteredServers.map((server) => (
-                          <tr key={server.id} className="hover:bg-[#1a1f2e]">
-                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-white">
-                              {server.hostname}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                              {server.locations[0]?.country?.name || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                              <div className="flex items-center">
-                                <div className="w-16 bg-[#2d3748] rounded-full h-2 mr-2">
-                                  <div 
-                                    className={`h-2 rounded-full ${
-                                      server.load < 30 ? 'bg-green-500' : 
-                                      server.load < 70 ? 'bg-yellow-500' : 
-                                      'bg-red-500'
-                                    }`} 
-                                    style={{ width: `${server.load}%` }}
-                                  ></div>
-                                </div>
-                                <span className="text-gray-400">{server.load}%</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                              {server.station || 'N/A'}
-                            </td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300">
-                              1080
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
+              renderServerList()
             )}
           </div>
         </div>

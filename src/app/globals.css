@@ -1,5 +1,8 @@
+/* @tailwind base; */
 @tailwind base;
+/* @tailwind components; */
 @tailwind components;
+/* @tailwind utilities; */
 @tailwind utilities;
 
 :root {
@@ -124,6 +127,17 @@ button.bg-primary:disabled {
   animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
 }
 
+/* Staggered animation cho danh sách máy chủ */
+.animate-staggered-fadeIn {
+  opacity: 0;
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Hiệu ứng nhấp nháy cho trạng thái online */
+.animate-pulse-online {
+  animation: pulseOnline 2s infinite;
+}
+
 /* Keyframes */
 @keyframes fadeIn {
   from {
@@ -168,5 +182,20 @@ button.bg-primary:disabled {
   }
   40%, 60% {
     transform: translate3d(4px, 0, 0);
+  }
+}
+
+@keyframes pulseOnline {
+  0% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.7);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgba(72, 187, 120, 0);
+  }
+  100% {
+    opacity: 0.5;
+    box-shadow: 0 0 0 0 rgba(72, 187, 120, 0);
   }
 }
