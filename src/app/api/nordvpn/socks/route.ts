@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSocksServers } from '../../../services/api';
 
 export async function GET(request: NextRequest) {
   try {
-    // Lấy token từ cookie hoặc header
-    const token = request.cookies.get('token')?.value || request.headers.get('x-auth-token');
+    // Lấy token từ header Authorization hoặc cookie
+    const authHeader = request.headers.get('Authorization');
+    let token = null;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      token = request.cookies.get('token')?.value || request.headers.get('x-auth-token');
+    }
     
     // Nếu không có token, kiểm tra các biến môi trường
     let username = process.env.NORDVPN_SOCKS_USERNAME;
@@ -35,7 +43,8 @@ export async function GET(request: NextRequest) {
         } else {
           throw new Error(`Failed to fetch user credentials: ${userResponse.status}`);
         }
-      } catch {
+      } catch (error) {
+        console.error('Error fetching SOCKS credentials:', error);
         // Nếu có lỗi khi lấy thông tin đăng nhập, sử dụng thông tin từ biến môi trường
         if (!username || !password) {
           return NextResponse.json({
@@ -52,31 +61,35 @@ export async function GET(request: NextRequest) {
       }, { status: 401 });
     }
     
-    // Gọi API để lấy danh sách máy chủ SOCKS
-    const response = await fetch('https://api.nordvpn.com/v1/servers/socks', {
-      headers: {
-        'Accept': 'application/json'
-      }
+    // Lấy tham số country_id từ query string nếu có
+    const url = new URL(request.url);
+    const countryId = url.searchParams.get('country_id');
+    
+    // Sử dụng hàm getSocksServers từ services/api.ts
+    const result = await getSocksServers({ 
+      token: token || undefined, 
+      countryId: countryId || undefined,
+      limit: 50, 
+      noCache: true 
     });
     
-    if (!response.ok) {
+    if (!result.success) {
       return NextResponse.json({
         success: false,
-        error: `API trả về lỗi: ${response.status}`
-      }, { status: response.status });
+        error: result.error || 'Lỗi khi lấy danh sách máy chủ SOCKS'
+      }, { status: 500 });
     }
-    
-    const servers = await response.json();
     
     // Trả về danh sách máy chủ và thông tin đăng nhập
     return NextResponse.json({
       success: true,
-      servers: servers,
+      servers: result.data?.servers || [],
       username: username,
       password: password
     });
     
   } catch (error) {
+    console.error('Error in SOCKS API:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'

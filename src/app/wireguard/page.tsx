@@ -22,14 +22,38 @@ interface ServerInfo {
   load: number;
   publicKey?: string;
   status?: string;
+  station?: string;
+  ipv6_station?: string;
   technologies?: {
     id: number;
     name: string;
     identifier: string;
+    metadata?: {
+      name: string;
+      value: string;
+    }[];
     pivot?: {
       status: string;
     }
   }[];
+  locations?: {
+    id?: number;
+    latitude?: number;
+    longitude?: number;
+    country?: {
+      id?: number;
+      name?: string;
+      code?: string;
+      city?: {
+        id?: number;
+        name?: string;
+        latitude?: number;
+        longitude?: number;
+        dns_name?: string;
+      }
+    }
+  }[];
+  publicKeyFetched?: boolean;
 }
 
 type DNSOption = 'cloudflare' | 'google' | 'nordvpn';
@@ -65,18 +89,11 @@ export default function WireGuardPage() {
   const suggestionListRef = useRef<HTMLDivElement>(null);
   const [fetchingPrivateKey, setFetchingPrivateKey] = useState(false);
   const [privateKeyMessage, setPrivateKeyMessage] = useState<string | null>(null);
-
-  // Thêm state cho chức năng tìm kiếm nâng cao
   const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
   const [countrySuggestions, setCountrySuggestions] = useState<Country[]>([]);
-
-  // Thêm bộ lọc % tải
   const [loadFilter, setLoadFilter] = useState<string>('all');
-
-  // Thêm state cho DNS selection
   const [selectedDNS, setSelectedDNS] = useState<DNSOption>('cloudflare');
 
-  // Thêm useEffect để theo dõi scroll
   useEffect(() => {
     const handleScroll = () => {
       const shouldShow = window.scrollY > 400;
@@ -89,7 +106,6 @@ export default function WireGuardPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [showScrollTop]);
 
-  // Hàm scroll to top với animation mượt
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
@@ -97,45 +113,37 @@ export default function WireGuardPage() {
     });
   };
 
-  // Thêm useEffect để reset loading khi component mount
   useEffect(() => {
     setLoading(false);
   }, []);
 
-  // Khôi phục token từ localStorage khi trang được tải
   useEffect(() => {
-    // Kiểm tra xem có đang chạy trên client không
     if (typeof window !== 'undefined') {
       const savedToken = localStorage.getItem('nordvpn_token');
       const savedPrivateKey = localStorage.getItem('nordvpn_private_key');
       const expiresAt = localStorage.getItem('nordvpn_expires_at');
       
-      // Kiểm tra token có hết hạn không
       if (expiresAt) {
         const expiryDate = new Date(expiresAt);
         const now = new Date();
         
         if (expiryDate <= now) {
-          // Token đã hết hạn, xóa dữ liệu lưu trữ
           localStorage.removeItem('nordvpn_token');
           localStorage.removeItem('nordvpn_private_key');
           localStorage.removeItem('nordvpn_expires_at');
           return;
         }
         
-        // Lưu thời gian hết hạn
         setTokenExpiry(expiryDate);
       }
       
       if (savedToken) {
         setToken(savedToken);
         
-        // Nếu có token nhưng không có privateKey, tự động lấy privateKey
         if (!savedPrivateKey) {
           setFetchingPrivateKey(true);
           setPrivateKeyMessage("Đang lấy thông tin xác thực từ token đã lưu...");
           
-          // Gọi API để lấy privateKey
           fetch('/api/nordvpn/credentials', {
             method: 'POST',
             headers: {
@@ -155,7 +163,6 @@ export default function WireGuardPage() {
             if (data.privateKey) {
               localStorage.setItem('nordvpn_private_key', data.privateKey);
               
-              // Lưu thời gian hết hạn nếu có
               if (data.expires_at) {
                 localStorage.setItem('nordvpn_expires_at', data.expires_at);
                 setTokenExpiry(new Date(data.expires_at));
@@ -173,30 +180,26 @@ export default function WireGuardPage() {
             setFetchingPrivateKey(false);
           });
         } else {
-          // Nếu đã có cả token và privateKey
           setIsAuthenticated(true);
         }
       }
     }
   }, []);
 
-  // Cập nhật thời gian còn lại của token
   useEffect(() => {
     if (!tokenExpiry) return;
     
     const interval = setInterval(() => {
       const now = new Date();
       if (tokenExpiry <= now) {
-        // Token đã hết hạn
         handleLogout();
         clearInterval(interval);
       }
-    }, 60000); // Kiểm tra mỗi phút
+    }, 60000);
     
     return () => clearInterval(interval);
   }, [tokenExpiry]);
 
-  // Hàm định dạng thời gian còn lại
   const formatTimeRemaining = (): string => {
     if (!tokenExpiry) return '';
     
@@ -218,15 +221,12 @@ export default function WireGuardPage() {
     }
   };
 
-  // Tải dữ liệu country từ API
   useEffect(() => {
     if (isAuthenticated && countries.length === 0) {
       const fetchCountries = async () => {
         try {
-          // Loại bỏ việc gọi trực tiếp đến API của NordVPN
-          // Chỉ sử dụng API local của chúng ta
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 giây timeout
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           
           const response = await fetch('/api/nordvpn/countries', {
             signal: controller.signal,
@@ -235,7 +235,6 @@ export default function WireGuardPage() {
             }
           });
           
-          // Xóa timeout khi request thành công
           clearTimeout(timeoutId);
           
           if (!response.ok) {
@@ -245,14 +244,12 @@ export default function WireGuardPage() {
           const data = await response.json();
           
           if (data.success && Array.isArray(data.countries)) {
-            // Lọc ra các quốc gia có id và name hợp lệ
             const validCountries = data.countries
               .filter((country: Country) => 
                 country && typeof country.id === 'number' && 
                 country.name && country.code
               );
               
-            // Sắp xếp theo tên quốc gia
             const sortedCountries = validCountries.sort((a: Country, b: Country) => 
               a.name.localeCompare(b.name)
             );
@@ -271,42 +268,40 @@ export default function WireGuardPage() {
     }
   }, [isAuthenticated, countries.length]);
 
-  // Cập nhật hàm xử lý khi chọn quốc gia
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
     if (!selectedId) {
-      // Reset các state liên quan khi chọn "Tất cả quốc gia"
       setSelectedCountry('');
       setSelectedCountryId(null);
       setSelectedCity('');
       setCities([]);
+      console.log('Đã xóa quốc gia, selectedCountryId = null');
     } else {
-      // Tìm country object dựa trên ID đã chọn
       const countryObj = countries.find(c => c.id === parseInt(selectedId));
       if (countryObj) {
         setSelectedCountry(countryObj.name);
         setSelectedCountryId(countryObj.id);
-        // Reset city khi đổi quốc gia
         setSelectedCity('');
+        console.log('Đã chọn quốc gia:', countryObj.name, 'selectedCountryId =', countryObj.id);
       }
     }
   };
 
-  // Định nghĩa fetchServers với useCallback
   const fetchServers = useCallback(async () => {
     setLoading(true);
     setError('');
     
     try {
-      // Xây dựng URL API với các tham số phù hợp
-      let url = '/api/nordvpn/servers?technology=wireguard';
+      let url = '/api/nordvpn/wireguard';
       
-      // Thêm tham số country_id nếu đã chọn
       if (selectedCountryId) {
         url = `/api/nordvpn/wireguard?country_id=${selectedCountryId}`;
+        console.log('Gọi API với country_id:', selectedCountryId);
       } else {
-        url = '/api/nordvpn/wireguard';
+        console.log('Gọi API không có country_id');
       }
+      
+      console.log('Gọi API với URL:', url);
       
       const response = await fetch(url);
       if (!response.ok) {
@@ -319,26 +314,72 @@ export default function WireGuardPage() {
         throw new Error(data.error || 'Không thể lấy danh sách máy chủ');
       }
       
-      // Lấy danh sách máy chủ từ API
       const formattedServers: ServerInfo[] = data.servers || [];
+
+      const enhancedServers = formattedServers.map(server => {
+        let publicKey = "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=";
+        let city = server.city || '';
+        let country = '';
+        
+        if (server.technologies && Array.isArray(server.technologies)) {
+          const wireguardTech = server.technologies.find(tech => tech.identifier === 'wireguard_udp');
+          
+          if (wireguardTech && wireguardTech.metadata && Array.isArray(wireguardTech.metadata)) {
+            const publicKeyData = wireguardTech.metadata.find(meta => meta.name === 'public_key');
+            if (publicKeyData && publicKeyData.value) {
+              publicKey = publicKeyData.value;
+            }
+          }
+        }
+        
+        if (server.locations && server.locations.length > 0) {
+          const location = server.locations[0];
+          if (location.country) {
+            if (location.country.city && location.country.city.name) {
+              city = location.country.city.name;
+            }
+            
+            if (location.country.name) {
+              country = location.country.name;
+              console.log('Tìm thấy quốc gia từ API:', location.country.name, 'ID:', location.country.id);
+            }
+          }
+        }
+        
+        return {
+          ...server,
+          publicKey: publicKey,
+          city: city,
+          country: country
+        };
+      });
       
-      setServers(formattedServers);
+      console.log('Dữ liệu nhận từ API:', formattedServers.length, 'máy chủ');
+      console.log('Servers sau khi xử lý:', enhancedServers.length, 'máy chủ');
+      
+      setServers(enhancedServers);
+      
+      if (selectedCountryId && enhancedServers.length > 0) {
+        const countryName = enhancedServers[0].country;
+        if (countryName && countryName !== selectedCountry) {
+          console.log('Cập nhật tên quốc gia từ:', selectedCountry, 'thành:', countryName);
+          setSelectedCountry(countryName);
+        }
+      }
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lỗi khi tải danh sách máy chủ');
     } finally {
       setLoading(false);
     }
-  }, [selectedCountryId]);
+  }, [selectedCountryId, selectedCountry]);
 
-  // Lấy danh sách máy chủ khi vào bước 2 hoặc khi chọn quốc gia/ID quốc gia
   useEffect(() => {
     if (isAuthenticated) {
       fetchServers();
     }
   }, [isAuthenticated, fetchServers]);
 
-  // Cập nhật danh sách thành phố khi chọn quốc gia
   useEffect(() => {
     if (selectedCountry && servers.length > 0) {
       const countryServers = servers.filter(server => server.country === selectedCountry);
@@ -348,13 +389,10 @@ export default function WireGuardPage() {
         .sort();
       setCities(uniqueCities);
       
-      // Reset thành phố đã chọn khi thay đổi quốc gia
       setSelectedCity('');
       
-      // Lọc lại danh sách server theo quốc gia đã chọn
       setFilteredServers(countryServers);
     } else if (!selectedCountry && servers.length > 0) {
-      // Nếu không chọn quốc gia, hiển thị tất cả server
       setCities([]);
       setSelectedCity('');
       setFilteredServers(servers);
@@ -364,22 +402,26 @@ export default function WireGuardPage() {
     }
   }, [selectedCountry, servers]);
 
-  // Lọc và sắp xếp danh sách máy chủ khi có thay đổi ở thành phố hoặc tìm kiếm
   useEffect(() => {
     if (servers.length > 0) {
       let filtered = [...servers];
       
-      // Lọc theo quốc gia nếu đã chọn
-      if (selectedCountry) {
-        filtered = filtered.filter(server => server.country === selectedCountry);
+      if (selectedCountry && !selectedCountryId) {
+        filtered = filtered.filter(server => 
+          server.country === selectedCountry || 
+          (server.locations && 
+           server.locations[0] && 
+           server.locations[0].country && 
+           server.locations[0].country.name === selectedCountry)
+        );
+        console.log('Lọc theo tên quốc gia:', selectedCountry, 'kết quả:', filtered.length);
       }
       
-      // Lọc theo thành phố nếu đã chọn
       if (selectedCity) {
         filtered = filtered.filter(server => server.city === selectedCity);
+        console.log('Lọc theo thành phố:', selectedCity, 'kết quả:', filtered.length);
       }
       
-      // Lọc theo % tải
       if (loadFilter !== 'all') {
         filtered = filtered.filter(server => {
           const load = server.load;
@@ -390,9 +432,9 @@ export default function WireGuardPage() {
             default: return true;
           }
         });
+        console.log('Lọc theo tải:', loadFilter, 'kết quả:', filtered.length);
       }
       
-      // Lọc theo từ khóa tìm kiếm
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         filtered = filtered.filter(server => 
@@ -401,15 +443,13 @@ export default function WireGuardPage() {
           server.country.toLowerCase().includes(query) ||
           (server.city && server.city.toLowerCase().includes(query))
         );
+        console.log('Lọc theo từ khóa:', searchQuery, 'kết quả:', filtered.length);
       }
       
       setFilteredServers(filtered);
     }
-  }, [servers, selectedCity, searchQuery, selectedCountry, loadFilter]);
+  }, [servers, selectedCity, searchQuery, selectedCountry, loadFilter, selectedCountryId]);
 
-  // Thay thế loadMoreServers bằng các hàm phân trang
-  
-  // Hàm đăng xuất - xóa token và quay lại bước 1
   const handleLogout = () => {
     localStorage.removeItem('nordvpn_token');
     localStorage.removeItem('nordvpn_private_key');
@@ -419,7 +459,6 @@ export default function WireGuardPage() {
     setIsAuthenticated(false);
   };
 
-  // Effect để lọc gợi ý quốc gia khi nhập vào ô tìm kiếm
   useEffect(() => {
     if (!searchQuery || searchQuery.length < 2) {
       setCountrySuggestions([]);
@@ -431,33 +470,27 @@ export default function WireGuardPage() {
     const suggestions = countries.filter(country => {
       const countryName = country.name.toLowerCase();
       
-      // Tìm kiếm chính xác
       if (countryName.includes(query)) return true;
       
-      // Tìm kiếm theo tiền tố
       if (countryName.startsWith(query)) return true;
       
-      // Tìm kiếm mờ nếu từ khóa đủ dài (3 ký tự trở lên)
       if (query.length >= 3 && countryName.includes(query)) return true;
       
       return false;
     });
     
-    setCountrySuggestions(suggestions.slice(0, 10)); // Giới hạn 10 gợi ý
+    setCountrySuggestions(suggestions.slice(0, 50));
     setShowCountrySuggestions(suggestions.length > 0);
   }, [searchQuery, countries]);
 
-  // Xử lý khi chọn một quốc gia từ danh sách gợi ý
   const handleSelectSuggestedCountry = useCallback((country: Country) => {
     setSelectedCountry(country.name);
     setSelectedCountryId(country.id);
     setSearchQuery('');
     setShowCountrySuggestions(false);
-    // Reset city khi đổi quốc gia
     setSelectedCity('');
   }, []);
 
-  // Xử lý sự kiện click ra ngoài để ẩn gợi ý
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
@@ -476,7 +509,6 @@ export default function WireGuardPage() {
     };
   }, []);
 
-  // Hàm reset tất cả bộ lọc
   const resetAllFilters = useCallback(() => {
     setSelectedCountry('');
     setSelectedCountryId(null);
@@ -485,10 +517,10 @@ export default function WireGuardPage() {
     setLoadFilter('all');
     setSelectedDNS('cloudflare');
     setShowCountrySuggestions(false);
-    setFilteredServers(servers);
-  }, [servers]);
+    
+    fetchServers();
+  }, [fetchServers]);
 
-  // Phân trang
   const {
     currentPage,
     totalPages,
@@ -507,8 +539,8 @@ export default function WireGuardPage() {
       setLoading(true);
       setError('');
 
-      // Lấy private key đã lưu
       const savedPrivateKey = localStorage.getItem('nordvpn_private_key');
+      const savedToken = localStorage.getItem('nordvpn_token');
       
       if (!savedPrivateKey) {
         setError('Không tìm thấy private key. Vui lòng đăng nhập lại.');
@@ -516,13 +548,12 @@ export default function WireGuardPage() {
         return;
       }
 
-      if (!server.publicKey) {
-        setError('Không tìm thấy public key cho server này');
+      if (!savedToken) {
+        setError('Không tìm thấy token. Vui lòng đăng nhập lại.');
         setLoading(false);
         return;
       }
 
-      // Gọi API để lấy cấu hình WireGuard
       const response = await fetch('/api/nordvpn/wireguard', {
         method: 'POST',
         headers: {
@@ -537,14 +568,21 @@ export default function WireGuardPage() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Không thể tải cấu hình');
+        const errorText = await response.text();
+        let errorMessage;
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || 'Không thể tải cấu hình';
+        } catch {
+          errorMessage = errorText || `Lỗi HTTP: ${response.status}`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
-      // Lấy blob từ response
       const blob = await response.blob();
       
-      // Tạo URL và tải file
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -571,7 +609,6 @@ export default function WireGuardPage() {
             <span className="text-[#f8b700]">Tạo cấu hình</span> <span className="text-white">WireGuard</span>
           </h1>
           
-          {/* Token Status */}
           {isAuthenticated && (
             <div className="mb-4 bg-[#1f2937] p-3 rounded-lg border border-[#2d3748]">
               <div className="text-sm text-gray-400">
@@ -587,28 +624,31 @@ export default function WireGuardPage() {
             </div>
           )}
 
-          {/* Filters */}
           {isAuthenticated && (
             <div className="mb-4 flex flex-wrap gap-2 items-center">
-              {/* Xóa phần này vì đã được di chuyển xuống dưới */}
             </div>
           )}
 
-          {/* Error Message */}
           {error && (
             <div className="bg-red-500/10 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg mb-4">
-              <p>{error}</p>
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-2 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <p className="font-medium">{error}</p>
+              </div>
+              <p className="mt-2 text-sm text-red-300/80">
+                Nếu lỗi vẫn tiếp tục, hãy thử làm mới trang hoặc đăng nhập lại.
+              </p>
             </div>
           )}
 
-          {/* Success Message */}
           {privateKeyMessage && !fetchingPrivateKey && !error && (
             <div className="bg-green-500/10 border border-green-500/50 text-green-300 px-4 py-3 rounded-lg mb-4">
               <p>{privateKeyMessage}</p>
             </div>
           )}
 
-          {/* Step 1: Token Input */}
           {!isAuthenticated && (
             <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
               <h2 className="text-xl font-semibold mb-4 text-[#f8b700]">Nhập Token NordVPN</h2>
@@ -632,7 +672,6 @@ export default function WireGuardPage() {
                 e.preventDefault();
                 const trimmedToken = token.trim();
                 
-                // Reset lỗi và trạng thái loading
                 setError('');
                 setLoading(false);
                 
@@ -641,10 +680,8 @@ export default function WireGuardPage() {
                   return;
                 }
                 
-                // Set loading trước khi gọi API
                 setLoading(true);
                 
-                // Gọi API xác thực token
                 fetch('/api/nordvpn/credentials', {
                   method: 'POST',
                   headers: {
@@ -665,15 +702,15 @@ export default function WireGuardPage() {
                     throw new Error("Private key không tìm thấy trong phản hồi API. Vui lòng kiểm tra token của bạn.");
                   }
                   
-                  // Lưu token và private key vào localStorage
                   localStorage.setItem('nordvpn_token', trimmedToken);
                   localStorage.setItem('nordvpn_private_key', data.privateKey);
                   
-                  // Lưu thời gian hết hạn nếu có
                   if (data.expires_at) {
                     localStorage.setItem('nordvpn_expires_at', data.expires_at);
                     setTokenExpiry(new Date(data.expires_at));
                   }
+                  
+                  window.dispatchEvent(new Event('nordvpn-login'));
                   
                   setIsAuthenticated(true);
                 })
@@ -724,7 +761,6 @@ export default function WireGuardPage() {
             </div>
           )}
 
-          {/* Step 2: Server Selection */}
           {isAuthenticated && (
             <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
               <div className="mb-6">
@@ -732,12 +768,25 @@ export default function WireGuardPage() {
                   <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
                     <h2 className="text-xl font-semibold text-[#f8b700]">Chọn máy chủ WireGuard</h2>
                     
+                    <button
+                      onClick={fetchServers}
+                      className="px-3 py-1 bg-green-500/10 hover:bg-green-500/20 text-green-300 rounded-md transition-colors flex items-center gap-2 text-sm"
+                      disabled={loading}
+                      title="Tải lại danh sách máy chủ"
+                    >
+                      <svg className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                      </svg>
+                      Làm mới
+                    </button>
+                    
                     <div className="flex flex-col space-y-4 sm:space-y-0 sm:flex-row sm:flex-wrap sm:gap-2">
                       <div className="w-full sm:w-auto">
                         <select
                           className="w-48 px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700]"
                           value={selectedCountryId || ''}
                           onChange={handleCountryChange}
+                          disabled={loading}
                         >
                           <option key="country-all" value="">Tất cả quốc gia</option>
                           {countries.map(country => (
@@ -756,6 +805,7 @@ export default function WireGuardPage() {
                           className="w-48 px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700]"
                           value={loadFilter}
                           onChange={(e) => setLoadFilter(e.target.value)}
+                          disabled={loading}
                         >
                           <option value="all">Tất cả % tải</option>
                           <option value="low">Thấp (≤ 30%)</option>
@@ -770,6 +820,7 @@ export default function WireGuardPage() {
                           value={selectedDNS}
                           onChange={(e) => setSelectedDNS(e.target.value as DNSOption)}
                           className="w-48 px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700]"
+                          disabled={loading}
                         >
                           {DNS_CONFIGS.map(dns => (
                             <option key={dns.value} value={dns.value}>
@@ -779,7 +830,6 @@ export default function WireGuardPage() {
                         </select>
                       </div>
 
-                      {/* Ô tìm kiếm */}
                       <div className="w-full sm:w-auto">
                         <input
                           ref={searchInputRef}
@@ -791,8 +841,8 @@ export default function WireGuardPage() {
                             setSearchQuery(e.target.value);
                             setShowCountrySuggestions(true);
                           }}
+                          disabled={loading}
                         />
-                        {/* Danh sách gợi ý quốc gia */}
                         {showCountrySuggestions && countrySuggestions.length > 0 && (
                           <div
                             ref={suggestionListRef}
@@ -811,13 +861,13 @@ export default function WireGuardPage() {
                         )}
                       </div>
 
-                      {/* Chọn thành phố */}
                       {selectedCountry && cities.length > 0 && (
                         <div className="w-full sm:w-auto">
                           <select
                             className="w-48 px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700]"
                             value={selectedCity}
                             onChange={(e) => setSelectedCity(e.target.value)}
+                            disabled={loading}
                           >
                             <option key="city-all" value="">Tất cả thành phố</option>
                             {cities.map(city => (
@@ -827,11 +877,11 @@ export default function WireGuardPage() {
                         </div>
                       )}
 
-                      {/* Nút xóa bộ lọc */}
                       {(selectedCountry || selectedCity || searchQuery || loadFilter !== 'all' || selectedDNS !== 'cloudflare') && (
                         <button
                           onClick={resetAllFilters}
                           className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-300 rounded-md transition-colors flex items-center gap-2"
+                          disabled={loading}
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -843,14 +893,33 @@ export default function WireGuardPage() {
                   </div>
                 </div>
 
-                {/* Hiển thị danh sách server */}
+                {(selectedCountry || selectedCity || loading) && (
+                  <div className="mb-4 flex flex-wrap gap-2 items-center">
+                    {selectedCity && (
+                      <div className="bg-purple-500/10 text-purple-300 px-3 py-1 rounded-full text-sm flex items-center">
+                        <span className="mr-1">Thành phố:</span>
+                        <span className="font-medium">{selectedCity}</span>
+                      </div>
+                    )}
+                    
+                    {loading && (
+                      <div className="bg-yellow-500/10 text-yellow-300 px-3 py-1 rounded-full text-sm flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Đang tải máy chủ...</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <ServerList
                   servers={paginatedServers}
                   loading={loading}
                   error={error}
                   renderServer={(server, utils) => (
                     <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748] hover:border-[#f8b700]/30 transition-colors">
-                      {/* Thông tin server */}
                       <div className="p-4">
                         <div className="flex justify-between items-start mb-2">
                           <h3 className="font-medium text-white">
@@ -861,25 +930,33 @@ export default function WireGuardPage() {
                               </span>
                             )}
                           </h3>
-                          <span className={`text-xl font-bold ${utils.getLoadColor(server.load)}`}>
-                            {server.load}%
-                          </span>
+                          <div className="flex flex-col items-end">
+                            <span className={`text-xl font-bold ${utils.getLoadColor(server.load)}`}>
+                              {server.load}%
+                            </span>
+                            <span className={`text-xs ${
+                              server.status === 'online' ? 'text-green-400' : 'text-red-400'
+                            }`}>
+                              {server.status === 'online' ? 'Online' : 'Offline'}
+                            </span>
+                          </div>
                         </div>
                         
                         <div className="text-sm text-gray-400">
                           {server.hostname}
                         </div>
 
-                        <div className="mt-2">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                            server.status === 'online' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
-                          }`}>
-                            {server.status === 'online' ? 'Online' : 'Offline'}
-                          </span>
-                        </div>
+                        {/* @ts-expect-error - Thuộc tính 'station' tồn tại trong dữ liệu từ API */}
+                        {server && server.station && (
+                          <div className="text-sm text-gray-400 mt-1">
+                            <div className="flex items-center">
+                              {/* @ts-expect-error - Thuộc tính 'station' tồn tại trong dữ liệu từ API */}
+                              <span>IP: <span className="font-mono">{server.station}</span></span>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Nút Download */}
                       <div className="p-4 pt-0">
                         <button
                           onClick={() => downloadConfig(server)}
@@ -895,7 +972,24 @@ export default function WireGuardPage() {
                   )}
                 />
 
-                {/* Phân trang */}
+                {!loading && !error && filteredServers.length === 0 && (
+                  <div className="bg-[#1f2937] rounded-lg p-8 border border-[#2d3748] text-center">
+                    <svg className="h-12 w-12 mx-auto text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                    <h3 className="text-lg font-medium text-white mb-2">Không tìm thấy máy chủ</h3>
+                    <p className="text-gray-400">
+                      Vui lòng thử lại với bộ lọc khác.
+                    </p>
+                    <button
+                      onClick={resetAllFilters}
+                      className="mt-4 bg-[#f8b700] hover:bg-[#f8b700]/90 text-black px-4 py-2 rounded font-medium transition-colors"
+                    >
+                      Xóa tất cả bộ lọc
+                    </button>
+                  </div>
+                )}
+
                 {filteredServers.length > 0 && (
                   <div className="mt-6 flex justify-center items-center">
                     <Pagination
@@ -906,7 +1000,6 @@ export default function WireGuardPage() {
                   </div>
                 )}
 
-                {/* Nút scroll to top */}
                 {showScrollTop && (
                   <button
                     onClick={scrollToTop}

@@ -15,13 +15,25 @@ export interface NordVPNServer {
   hostname: string;
   load: number;
   status: string;
-  locations: Location[];
-  technologies: Technology[];
-  groups: Group[];
-  specifications: Specification[];
-  created_at: string;
-  updated_at: string;
-  ips: {
+  locations: NordVPNLocation[];
+  technologies: Array<{
+    id: number;
+    name: string;
+    identifier: string;
+    metadata?: Array<{
+      name: string;
+      value: string;
+    }>;
+    pivot?: {
+      public_key?: string;
+      status?: string;
+    };
+  }>;
+  groups?: Group[];
+  specifications?: Specification[];
+  created_at?: string;
+  updated_at?: string;
+  ips?: {
     [key: string]: string;
   };
 }
@@ -44,13 +56,14 @@ export interface Location {
 
 // Technology
 export interface Technology {
-  id: number;
+  id?: number;
   name: string;
   identifier: string;
-  pivot: {
+  status?: 'online' | 'offline';
+  pivot?: {
     status: string;
   };
-  metadata: {
+  metadata?: {
     [key: string]: unknown;
   };
 }
@@ -73,11 +86,13 @@ export interface Specification {
 
 // WireGuard Credentials
 export interface WireGuardCredentials {
-  expires_at: string;
-  created_at: string;
-  id: string;
-  private_key?: string;
-  public_key?: string;
+  username?: string;
+  password?: string;
+  expires_at?: string;
+  created_at?: string;
+  id?: string;
+  private_key: string;
+  public_key: string;
   nordlynx_private_key?: string;
   nordlynx_public_key?: string;
 }
@@ -116,8 +131,11 @@ export interface ServerInfo {
   name: string;
   hostname: string;
   country: string;
-  city: string;
+  city?: string;
   load: number;
+  status?: 'online' | 'offline';
+  technologies?: Technology[];
+  locations?: NordVPNLocation[];
 }
 
 // OpenVPN Server Info
@@ -157,4 +175,59 @@ export interface AuthState {
     email: string;
     username: string;
   };
+}
+
+// Server Params
+export interface ServerParams {
+  page?: string;
+  limit?: number;
+  offset?: number;
+  search?: string;
+  sort?: string;
+  filters?: Record<string, string>;
+  noCache?: boolean;
+  revalidateSeconds?: number;
+  fetchAll?: boolean;
+}
+
+export interface NordVPNTechnology {
+  id: number;
+  name: string;
+  identifier: string;
+  created_at: string;
+  updated_at: string;
+  metadata?: Array<{
+    name: string;
+    value: string;
+  }>;
+  pivot: {
+    server_id: number;
+    technology_id: number;
+    public_key?: string;
+  };
+}
+
+export interface NordVPNCountry {
+  id: number;
+  name: string;
+  code: string;
+  city?: NordVPNCity;
+}
+
+export interface NordVPNCity {
+  id: number;
+  name: string;
+  latitude: number;
+  longitude: number;
+  dns_name: string;
+  hub_score: number;
+}
+
+export interface NordVPNLocation {
+  id: number;
+  created_at?: string;
+  updated_at?: string;
+  latitude: number;
+  longitude: number;
+  country: NordVPNCountry;
 } 

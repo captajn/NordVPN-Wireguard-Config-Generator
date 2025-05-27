@@ -15,9 +15,8 @@ export async function POST(request: NextRequest) {
     // Tạo Basic Auth token từ token
     const basicAuth = Buffer.from(`token:${token}`).toString('base64');
     
-    // Gọi API để lấy thông tin đăng nhập
+    // Gọi API để lấy thông tin đăng nhập SOCKS
     const response = await fetch('https://api.nordvpn.com/v1/users/services/credentials', {
-      method: 'GET',
       headers: {
         'Authorization': `Basic ${basicAuth}`,
         'Accept': 'application/json'
@@ -33,27 +32,28 @@ export async function POST(request: NextRequest) {
     // Parse dữ liệu JSON từ response
     const data = await response.json();
     
-    // Kiểm tra dữ liệu trả về có đúng định dạng không
-    if (!data.username || !data.password) {
-      throw new Error('API không trả về thông tin đăng nhập hợp lệ');
+    // Kiểm tra dữ liệu trả về từ API
+    console.log('API user data:', JSON.stringify(data));
+    
+    // Lấy thông tin đăng nhập SOCKS
+    const username = data.username || '';
+    const password = data.password || '';
+    
+    if (!username || !password) {
+      return NextResponse.json({
+        success: false,
+        error: 'Không thể lấy thông tin đăng nhập SOCKS từ API. Vui lòng kiểm tra token của bạn.'
+      }, { status: 400 });
     }
     
-    // Lưu token vào cookie để sử dụng cho các API call khác
-    const cookieResponse = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      username: data.username,
-      password: data.password
+      username: username,
+      password: password
     });
-    
-    cookieResponse.cookies.set('token', token, {
-      path: '/',
-      maxAge: 86400, // 24 giờ
-      httpOnly: true
-    });
-    
-    return cookieResponse;
     
   } catch (error) {
+    console.error('Error in user API:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'

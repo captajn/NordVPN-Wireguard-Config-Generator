@@ -7,7 +7,7 @@ import type {
   NordVPNCountry,
   ServerInfo,
   NordVPNLocation
-} from '../types';
+} from '../../types';
 
 interface NordVPNServerResponse {
   id: number;
@@ -303,9 +303,14 @@ export async function getServers(params?: ServerParams): Promise<ApiResponse<{ s
 /**
  * Lấy danh sách máy chủ SOCKS
  */
-export async function getSocksServers(params?: Omit<ServerParams, 'filters'>): Promise<ApiResponse<{ servers: NordVPNServer[], total: number }>> {
-  // Sử dụng API đúng cho máy chủ SOCKS
-  const url = `${NORD_API_BASE}/servers?limit=${params?.limit || 500}&filters[servers_technologies][identifier]=socks`;
+export async function getSocksServers(params?: Omit<ServerParams, 'filters'> & { token?: string, countryId?: string }): Promise<ApiResponse<{ servers: NordVPNServer[], total: number }>> {
+  // Xây dựng URL với API servers và bộ lọc theo yêu cầu
+  let url = `${NORD_API_BASE}/servers?filters[servers.status]=online&filters[servers_technologies][identifier]=socks&filters[servers_technologies][pivot][status]=online&limit=${params?.limit || 1000}`;
+  
+  // Thêm lọc theo quốc gia nếu có
+  if (params?.countryId) {
+    url += `&filters[country_id]=${params.countryId}`;
+  }
   
   try {
     // Dynamic cache strategy dựa trên nhu cầu
@@ -313,12 +318,21 @@ export async function getSocksServers(params?: Omit<ServerParams, 'filters'>): P
       ? { cache: 'no-store' as const } 
       : { next: { revalidate: params?.revalidateSeconds || 3600 } };
 
+    // Tạo headers với token xác thực nếu có
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+    };
+
+    // Thêm token vào header nếu có
+    if (params?.token) {
+      const basicAuthToken = Buffer.from(`token:${params.token}`).toString('base64');
+      headers['Authorization'] = `Basic ${basicAuthToken}`;
+    }
+
     const response = await fetch(url, {
       ...cacheOption,
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-      }
+      headers
     });
 
     if (!response.ok) {
@@ -327,8 +341,15 @@ export async function getSocksServers(params?: Omit<ServerParams, 'filters'>): P
 
     const servers = await response.json();
     
-    // Xử lý tìm kiếm và sắp xếp tương tự như getServers
-    let filteredServers = [...servers];
+    // Bảo đảm dữ liệu có kiểu NordVPNServer
+    let filteredServers = [...servers].map(server => {
+      // Đảm bảo trường station được giữ lại
+      return {
+        ...server,
+        // Thêm các trường mặc định nếu cần
+        ips: server.ips || {}
+      } as NordVPNServer;
+    });
     
     // Lọc theo text tìm kiếm
     if (params?.search) {
@@ -338,8 +359,8 @@ export async function getSocksServers(params?: Omit<ServerParams, 'filters'>): P
           location.country.name.toLowerCase().includes(searchLower)
         ) || 
         server.name.toLowerCase().includes(searchLower) ||
-        (server.locations[0]?.city?.name && 
-          server.locations[0].city.name.toLowerCase().includes(searchLower))
+        (server.locations[0]?.country?.city?.name && 
+          server.locations[0].country.city.name.toLowerCase().includes(searchLower))
       );
     }
     

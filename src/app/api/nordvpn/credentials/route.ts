@@ -32,8 +32,19 @@ export async function POST(request: NextRequest) {
     // Parse dữ liệu JSON từ response
     const data = await response.json();
     
-    // Tạo private key cho WireGuard
-    const privateKey = data.token || '';
+    // Kiểm tra dữ liệu trả về từ API
+    console.log('API response data:', JSON.stringify(data));
+    
+    // Tìm private key trong dữ liệu trả về
+    // NordVPN API trả về private key trong trường nordlynx_private_key
+    const privateKey = data.nordlynx_private_key || data.token || '';
+    
+    if (!privateKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Không thể lấy private key từ API. Vui lòng kiểm tra token của bạn.'
+      }, { status: 400 });
+    }
     
     // Tính thời gian hết hạn (30 ngày từ hiện tại)
     const expiresAt = new Date();
@@ -46,6 +57,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
+    console.error('Error in credentials API:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'

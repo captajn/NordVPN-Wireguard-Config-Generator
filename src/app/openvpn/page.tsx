@@ -143,7 +143,16 @@ function OpenVPNContent() {
           params.append('filters[country_id]', filters.countryId);
         }
 
-        const response = await fetch(`/api/nordvpn/openvpn?${params.toString()}`);
+        // Lấy token từ localStorage
+        const savedToken = localStorage.getItem('nordvpn_token');
+        
+        const response = await fetch(`/api/nordvpn/openvpn?${params.toString()}`, {
+          headers: {
+            'Authorization': savedToken ? `Bearer ${savedToken}` : '',
+            'Accept': 'application/json'
+          }
+        });
+        
         const data = await response.json();
 
         if (data.success) {

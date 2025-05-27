@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   try {
+    // Lấy token từ header Authorization
+    const authHeader = request.headers.get('Authorization');
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Token được lấy nhưng không được sử dụng trong hàm này
+      // Giữ lại phần code này để tương thích với các API khác
+    }
+    
     // Lấy các tham số từ URL
     const searchParams = request.nextUrl.searchParams;
     const params = new URLSearchParams();
@@ -39,6 +47,7 @@ export async function GET(request: NextRequest) {
     });
     
   } catch (error) {
+    console.error('Error in OpenVPN API:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'
@@ -48,6 +57,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Lấy token từ header Authorization
+    const authHeader = request.headers.get('Authorization');
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      // Token được lấy nhưng không được sử dụng trong hàm này
+      // Giữ lại phần code này để tương thích với các API khác
+    }
+    
     // Lấy thông tin từ request body
     const { hostname, protocol = 'udp' } = await request.json();
     
@@ -94,6 +111,7 @@ export async function POST(request: NextRequest) {
     });
     
   } catch (error) {
+    console.error('Error in OpenVPN API:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi khi tạo cấu hình OpenVPN'

@@ -17,11 +17,28 @@ export default function Header() {
     
     checkToken();
     
-    // Thêm event listener để kiểm tra khi localStorage thay đổi
-    window.addEventListener('storage', checkToken);
+    // Tạo custom event để đồng bộ trạng thái đăng nhập giữa các trang
+    const handleLoginEvent = () => {
+      setIsLoggedIn(true);
+    };
+
+    const handleLogoutEvent = () => {
+      setIsLoggedIn(false);
+    };
+
+    // Thêm event listener cho localStorage và custom events
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'nordvpn_token') {
+        setIsLoggedIn(!!e.newValue);
+      }
+    });
+    
+    window.addEventListener('nordvpn-login', handleLoginEvent as EventListener);
+    window.addEventListener('nordvpn-logout', handleLogoutEvent);
     
     return () => {
-      window.removeEventListener('storage', checkToken);
+      window.removeEventListener('nordvpn-login', handleLoginEvent as EventListener);
+      window.removeEventListener('nordvpn-logout', handleLogoutEvent);
     };
   }, []);
 
@@ -32,6 +49,10 @@ export default function Header() {
       localStorage.removeItem('nordvpn_expires_at');
       localStorage.removeItem('nordvpn_username');
       localStorage.removeItem('nordvpn_password');
+      
+      // Phát custom event để thông báo logout
+      window.dispatchEvent(new Event('nordvpn-logout'));
+      
       setIsLoggedIn(false);
       window.location.reload();
     }

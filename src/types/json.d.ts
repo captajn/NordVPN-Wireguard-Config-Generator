@@ -1,4 +1,4 @@
-import type { NordVPNCountry } from '../app/types';
+import type { NordVPNCountry } from './index';
 
 declare module "*.json" {
   const value: NordVPNCountry[];

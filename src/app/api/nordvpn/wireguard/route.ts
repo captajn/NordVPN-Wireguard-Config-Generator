@@ -13,59 +13,94 @@ const DNS_OPTIONS = {
  * POST: Lấy public key cho một máy chủ WireGuard cụ thể
  */
 
-// Hàm để lấy danh sách máy chủ WireGuard
-async function fetchWireGuardServers(countryId?: number): Promise<{success: boolean; servers?: unknown; error?: string}> {
+export async function GET(request: NextRequest) {
   try {
-    // Xây dựng URL API với các tham số phù hợp
-    let apiUrl = 'https://api.nordvpn.com/v1/servers?limit=500&filters[servers_technologies][identifier]=wireguard_udp';
+    // Lấy token từ header Authorization hoặc cookie
+    const authHeader = request.headers.get('Authorization');
+    let token = null;
     
-    // Thêm tham số country_id nếu được cung cấp
-    if (countryId) {
-      apiUrl += `&filters[country_id]=${countryId}`;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    } else {
+      token = request.cookies.get('token')?.value || request.headers.get('x-auth-token');
     }
     
-    // Gọi API NordVPN để lấy danh sách máy chủ
-    const response = await fetch(apiUrl, {
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (!response.ok) {
-      throw new Error(`API returned status: ${response.status}`);
+    // Nếu không có token, trả về lỗi
+    if (!token) {
+      return NextResponse.json({
+        success: false,
+        error: 'Không có token xác thực'
+      }, { status: 401 });
     }
     
-    // Parse dữ liệu JSON từ response
-    const servers = await response.json();
-    
-    // Trả về danh sách máy chủ
-    return {
-      success: true,
-      servers: servers
+    // Tạo headers với token xác thực
+    const headers: HeadersInit = {
+      'Accept': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
     };
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Lỗi không xác định khi lấy danh sách máy chủ WireGuard'
-    };
-  }
-}
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  try {
-    // Lấy tham số country_id từ URL nếu có
+    // Thêm token vào header
+    const basicAuthToken = Buffer.from(`token:${token}`).toString('base64');
+    headers['Authorization'] = `Basic ${basicAuthToken}`;
+
+    // Lấy country_id từ query parameters nếu có
     const url = new URL(request.url);
     const countryId = url.searchParams.get('country_id');
     
-    // Gọi hàm để lấy danh sách máy chủ WireGuard
-    const result = await fetchWireGuardServers(countryId ? parseInt(countryId) : undefined);
+    console.log('Query parameters:', Object.fromEntries(url.searchParams.entries()));
+    console.log('countryId từ query params:', countryId);
     
-    // Trả về kết quả
-    return NextResponse.json(result);
-  } catch (err) {
+    // Xây dựng URL với các tham số lọc
+    // URL cơ bản luôn bao gồm bộ lọc wireguard_udp và giới hạn 50 kết quả
+    let apiUrl = 'https://api.nordvpn.com/v1/servers/recommendations?filters[servers_technologies][identifier]=wireguard_udp&limit=50';
+    
+    // Thêm country_id vào bộ lọc nếu có
+    // Format đúng: https://api.nordvpn.com/v1/servers/recommendations?filters[country_id]=<ID_COUNTRY>&filters[servers_technologies][identifier]=wireguard_udp&limit=50
+    if (countryId) {
+      apiUrl = `https://api.nordvpn.com/v1/servers/recommendations?filters[country_id]=${countryId}&filters[servers_technologies][identifier]=wireguard_udp&limit=50`;
+      console.log('Sử dụng country_id:', countryId, 'trong API URL');
+    }
+    
+    console.log('Calling NordVPN API:', apiUrl);
+    
+    // Gọi API để lấy danh sách máy chủ WireGuard được đề xuất
+    const response = await fetch(apiUrl, {
+      headers
+    });
+    
+    if (!response.ok) {
+      return NextResponse.json({
+        success: false,
+        error: `API trả về lỗi: ${response.status}`
+      }, { status: response.status });
+    }
+    
+    const servers = await response.json();
+    
+    // Log một phần của dữ liệu để debug
+    if (Array.isArray(servers) && servers.length > 0) {
+      console.log('Mẫu dữ liệu server đầu tiên từ API:');
+      console.log('- Tên server:', servers[0].name);
+      if (servers[0].locations && servers[0].locations.length > 0) {
+        const location = servers[0].locations[0];
+        if (location.country) {
+          console.log('- Quốc gia từ locations:', location.country.name, 'ID:', location.country.id);
+        }
+      }
+      console.log('- Số lượng server:', servers.length);
+    }
+    
+    // Trả về danh sách máy chủ
+    return NextResponse.json({
+      success: true,
+      servers: servers
+    });
+    
+  } catch (error) {
+    console.error('Error in WireGuard API:', error);
     return NextResponse.json({
       success: false,
-      error: err instanceof Error ? err.message : 'Lỗi không xác định'
+      error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'
     }, { status: 500 });
   }
 }
@@ -144,10 +179,11 @@ export async function POST(request: Request) {
       }
     });
 
-  } catch {
+  } catch (error) {
+    console.error('Lỗi khi tạo cấu hình WireGuard:', error);
     return NextResponse.json({
       success: false,
-      error: 'Lỗi server khi xử lý yêu cầu'
+      error: error instanceof Error ? error.message : 'Lỗi server khi xử lý yêu cầu'
     }, { status: 500 });
   }
 } 
