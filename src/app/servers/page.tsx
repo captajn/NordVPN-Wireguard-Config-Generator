@@ -105,7 +105,6 @@ export default function ServersPage() {
         throw new Error('Định dạng dữ liệu quốc gia không hợp lệ');
       }
     } catch (err) {
-      console.error('Lỗi khi tải danh sách quốc gia:', err);
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi khi tải danh sách quốc gia');
     }
   }, []);
@@ -136,7 +135,6 @@ export default function ServersPage() {
         throw new Error('Định dạng dữ liệu không hợp lệ');
       }
     } catch (err) {
-      console.error('Lỗi khi tải danh sách máy chủ:', err);
       setError(err instanceof Error ? err.message : 'Đã xảy ra lỗi không xác định');
     } finally {
       setLoading(false);

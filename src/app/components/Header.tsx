@@ -1,19 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 
 export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    // Kiểm tra token khi component được mount
+    const checkToken = () => {
+      const token = localStorage.getItem('nordvpn_token');
+      setIsLoggedIn(!!token);
+    };
+    
+    checkToken();
+    
+    // Thêm event listener để kiểm tra khi localStorage thay đổi
+    window.addEventListener('storage', checkToken);
+    
+    return () => {
+      window.removeEventListener('storage', checkToken);
+    };
+  }, []);
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('nordvpn_token');
       localStorage.removeItem('nordvpn_private_key');
       localStorage.removeItem('nordvpn_expires_at');
+      localStorage.removeItem('nordvpn_username');
+      localStorage.removeItem('nordvpn_password');
+      setIsLoggedIn(false);
       window.location.reload();
     }
+  };
+
+  const handleLogin = () => {
+    window.location.href = '/wireguard';
   };
 
   return (
@@ -60,10 +85,10 @@ export default function Header() {
             SOCKS
           </Link>
           <button
-            onClick={handleLogout}
+            onClick={isLoggedIn ? handleLogout : handleLogin}
             className="text-white hover:text-primary transition-colors font-medium text-lg"
           >
-            Đăng xuất
+            {isLoggedIn ? 'Thoát' : 'Đăng Nhập'}
           </button>
         </nav>
 
@@ -123,10 +148,10 @@ export default function Header() {
             SOCKS
           </Link>
           <button
-            onClick={handleLogout}
+            onClick={isLoggedIn ? handleLogout : handleLogin}
             className="block w-full text-left px-6 py-3 text-white hover:bg-primary hover:text-black font-medium"
           >
-            Đăng xuất
+            {isLoggedIn ? 'Thoát' : 'Đăng Nhập'}
           </button>
         </div>
       )}

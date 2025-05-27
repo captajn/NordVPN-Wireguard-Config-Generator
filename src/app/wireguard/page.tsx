@@ -63,6 +63,8 @@ export default function WireGuardPage() {
   const [selectedCountryId, setSelectedCountryId] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const suggestionListRef = useRef<HTMLDivElement>(null);
+  const [fetchingPrivateKey, setFetchingPrivateKey] = useState(false);
+  const [privateKeyMessage, setPrivateKeyMessage] = useState<string | null>(null);
 
   // Thêm state cho chức năng tìm kiếm nâng cao
   const [showCountrySuggestions, setShowCountrySuggestions] = useState(false);
@@ -127,10 +129,53 @@ export default function WireGuardPage() {
       
       if (savedToken) {
         setToken(savedToken);
-      }
-      
-      if (savedPrivateKey) {
-        setIsAuthenticated(true);
+        
+        // Nếu có token nhưng không có privateKey, tự động lấy privateKey
+        if (!savedPrivateKey) {
+          setFetchingPrivateKey(true);
+          setPrivateKeyMessage("Đang lấy thông tin xác thực từ token đã lưu...");
+          
+          // Gọi API để lấy privateKey
+          fetch('/api/nordvpn/credentials', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: savedToken }),
+          })
+          .then(response => {
+            if (!response.ok) {
+              return response.json().then(data => {
+                throw new Error(data.error || `Lỗi khi lấy thông tin xác thực: ${response.status}`);
+              });
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (data.privateKey) {
+              localStorage.setItem('nordvpn_private_key', data.privateKey);
+              
+              // Lưu thời gian hết hạn nếu có
+              if (data.expires_at) {
+                localStorage.setItem('nordvpn_expires_at', data.expires_at);
+                setTokenExpiry(new Date(data.expires_at));
+              }
+              
+              setIsAuthenticated(true);
+              setPrivateKeyMessage("Đã lấy thông tin xác thực thành công!");
+            }
+          })
+          .catch(err => {
+            setPrivateKeyMessage(`Không thể lấy thông tin xác thực: ${err.message}`);
+            setError(`Không thể lấy thông tin xác thực: ${err.message}`);
+          })
+          .finally(() => {
+            setFetchingPrivateKey(false);
+          });
+        } else {
+          // Nếu đã có cả token và privateKey
+          setIsAuthenticated(true);
+        }
       }
     }
   }, []);
@@ -263,8 +308,6 @@ export default function WireGuardPage() {
         url = '/api/nordvpn/wireguard';
       }
       
-      console.log('Fetching from URL:', url);
-      
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Không thể lấy danh sách máy chủ: ${response.status}`);
@@ -278,8 +321,6 @@ export default function WireGuardPage() {
       
       // Lấy danh sách máy chủ từ API
       const formattedServers: ServerInfo[] = data.servers || [];
-      
-      console.log('Received servers:', formattedServers.length);
       
       setServers(formattedServers);
       
@@ -514,7 +555,6 @@ export default function WireGuardPage() {
       window.URL.revokeObjectURL(url);
       
     } catch (error) {
-      console.error('Error downloading config:', error);
       setError(error instanceof Error ? error.message : 'Đã xảy ra lỗi khi tải cấu hình');
     } finally {
       setLoading(false);
@@ -561,6 +601,13 @@ export default function WireGuardPage() {
             </div>
           )}
 
+          {/* Success Message */}
+          {privateKeyMessage && !fetchingPrivateKey && !error && (
+            <div className="bg-green-500/10 border border-green-500/50 text-green-300 px-4 py-3 rounded-lg mb-4">
+              <p>{privateKeyMessage}</p>
+            </div>
+          )}
+
           {/* Step 1: Token Input */}
           {!isAuthenticated && (
             <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
@@ -568,6 +615,18 @@ export default function WireGuardPage() {
               <p className="mb-4 text-gray-300">
                 Để tạo cấu hình WireGuard, bạn cần có token xác thực từ tài khoản NordVPN.
               </p>
+              
+              {fetchingPrivateKey && (
+                <div className="mb-4 bg-blue-500/10 border border-blue-500/50 text-blue-300 px-4 py-3 rounded-lg">
+                  <div className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-300" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p>{privateKeyMessage}</p>
+                  </div>
+                </div>
+              )}
               
               <form onSubmit={(e) => {
                 e.preventDefault();

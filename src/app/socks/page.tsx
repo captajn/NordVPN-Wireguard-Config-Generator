@@ -11,28 +11,21 @@ interface Country {
   code: string;
 }
 
-interface Credentials {
-  username: string;
-  password: string;
-}
-
 export default function SocksPage() {
   const [servers, setServers] = useState<NordVPNServer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loadingCredentials, setLoadingCredentials] = useState(false);
+  const [token, setToken] = useState('');
   
   // Thêm state cho việc lọc và sắp xếp
   const [selectedCountry, setSelectedCountry] = useState<string>('');
   const [countries, setCountries] = useState<Country[]>([]);
   const [sortOption, setSortOption] = useState<'load-asc' | 'load-desc'>('load-asc');
   const [filteredServers, setFilteredServers] = useState<NordVPNServer[]>([]);
-  
-  // Trong component
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
   
   // Sắp xếp danh sách máy chủ
   const sortServers = useCallback((serverList: NordVPNServer[], sort: string) => {
@@ -49,33 +42,19 @@ export default function SocksPage() {
   }, []);
   
   // Hàm lấy danh sách máy chủ SOCKS
-  const fetchSocksServers = useCallback(async () => {
+  const fetchSocksServers = useCallback(async (setLoadingState = true) => {
     try {
-      setLoading(true);
+      if (setLoadingState) {
+        setLoading(true);
+      }
+      
       const response = await fetch('/api/nordvpn/socks');
       const data = await response.json();
       
-      console.log('Debug - API Response:', data); // Debug log
-      console.log('Debug - Credentials from API:', data.credentials); // Thêm debug để kiểm tra mật khẩu
-
       if (data.success) {
         const serverList = data.servers as NordVPNServer[];
         setServers(serverList);
         
-        // Lưu credentials từ API response
-        if (data.credentials) {
-          setCredentials(data.credentials);
-          setUsername(data.credentials.username);
-          setPassword(data.credentials.password);
-          setIsAuthenticated(true);
-          
-          console.log('Debug - Credentials set in state:', {
-            username: data.credentials.username,
-            password: data.credentials.password,
-            passwordLength: data.credentials.password?.length,
-          });
-        }
-
         // Xử lý danh sách quốc gia từ máy chủ trả về
         const countryMap = new Map<number, Country>();
         
@@ -99,10 +78,11 @@ export default function SocksPage() {
         setError(data.error || 'Lỗi không xác định');
       }
     } catch (err) {
-      console.error('Debug - Error:', err);
       setError(err instanceof Error ? err.message : 'Lỗi không xác định');
     } finally {
-      setLoading(false);
+      if (setLoadingState) {
+        setLoading(false);
+      }
     }
   }, [sortOption, sortServers]);
   
@@ -111,29 +91,54 @@ export default function SocksPage() {
     const savedToken = localStorage.getItem('nordvpn_token');
     
     if (savedToken) {
-      // Nếu có token, lấy thông tin username và password từ localStorage nếu có
+      setToken(savedToken);
+      setIsAuthenticated(true);
+      fetchSocksServers();
+      
+      // Kiểm tra xem có thông tin đăng nhập SOCKS đã lưu không
       const savedUsername = localStorage.getItem('nordvpn_username');
       const savedPassword = localStorage.getItem('nordvpn_password');
       
       if (savedUsername && savedPassword) {
         setUsername(savedUsername);
         setPassword(savedPassword);
-        setIsAuthenticated(true);
-        console.log('Debug - Loaded credentials from localStorage:', {
-          username: savedUsername,
-          passwordLength: savedPassword?.length || 0
-        });
       } else {
-        // Nếu không có thông tin đăng nhập trong localStorage, lấy từ API
-        console.log('Debug - No saved credentials, fetching from API using token');
+        // Nếu chưa có thông tin đăng nhập, gọi API để lấy
         fetchUserCredentials(savedToken);
       }
+      
+      // Thêm event listener để lắng nghe thay đổi token từ các trang khác
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'nordvpn_token') {
+          if (e.newValue) {
+            setToken(e.newValue);
+            setIsAuthenticated(true);
+            fetchSocksServers();
+            
+            // Kiểm tra lại thông tin đăng nhập
+            const username = localStorage.getItem('nordvpn_username');
+            const password = localStorage.getItem('nordvpn_password');
+            
+            if (username && password) {
+              setUsername(username);
+              setPassword(password);
+            } else {
+              fetchUserCredentials(e.newValue);
+            }
+          } else {
+            setToken('');
+            setIsAuthenticated(false);
+          }
+        }
+      };
+      
+      window.addEventListener('storage', handleStorageChange);
+      return () => {
+        window.removeEventListener('storage', handleStorageChange);
+      };
     } else {
-      console.log('Debug - No saved token found');
+      setLoading(false);
     }
-    
-    // Lấy danh sách máy chủ SOCKS
-    fetchSocksServers();
   }, [fetchSocksServers]);
   
   // Lọc và sắp xếp danh sách máy chủ khi có thay đổi
@@ -200,7 +205,6 @@ export default function SocksPage() {
   const fetchUserCredentials = async (userToken: string) => {
     try {
       setLoadingCredentials(true);
-      console.log('Debug - Fetching user credentials with token');
       
       const response = await fetch('/api/nordvpn/user', {
         method: 'POST',
@@ -211,16 +215,10 @@ export default function SocksPage() {
       });
       
       const data = await response.json();
-      console.log('Debug - User API response status:', response.status);
       
       if (!response.ok) {
         throw new Error(data.error || 'Không thể lấy thông tin đăng nhập');
       }
-      
-      console.log('Debug - User API response data:', {
-        username: data.username,
-        passwordLength: data.password?.length || 0
-      });
       
       if (data.username && data.password) {
         setUsername(data.username);
@@ -230,12 +228,9 @@ export default function SocksPage() {
         // Lưu thông tin đăng nhập vào localStorage
         localStorage.setItem('nordvpn_username', data.username);
         localStorage.setItem('nordvpn_password', data.password);
-        
-        console.log('Debug - Credentials saved to localStorage');
       }
     } catch (err) {
-      console.error('Lỗi khi lấy thông tin đăng nhập:', err);
-      // Không hiển thị lỗi này cho người dùng
+      setError(err instanceof Error ? err.message : 'Lỗi không xác định');
     } finally {
       setLoadingCredentials(false);
     }
@@ -299,7 +294,7 @@ export default function SocksPage() {
 
               <button
                 onClick={() => {
-                  const proxyInfo = `${server.hostname}:1080:${username}:${credentials?.password || password}`;
+                  const proxyInfo = `${server.hostname}:1080:${username}:${password}`;
                   const blob = new Blob([proxyInfo], { type: 'text/plain' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -335,136 +330,201 @@ export default function SocksPage() {
             <span className="text-[#f8b700]">Danh sách</span> <span className="text-white">SOCKS Proxy</span>
           </h1>
           
-          {/* Form đăng nhập và tải xuống proxy */}
-          <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748] mb-8">
-            <h2 className="text-xl font-semibold p-6 border-b border-[#2d3748]">Thông tin đăng nhập SOCKS</h2>
-            
-            {error && (
-              <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
-                <p>{error}</p>
-              </div>
-            )}
-            
-            <div className="p-6">
-              <form onSubmit={handleSubmit} className="mb-4">
-                <div className="grid md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <label htmlFor="username" className="block text-sm font-medium mb-1 text-gray-300">
-                      Tên người dùng SOCKS
-                    </label>
-                    <input
-                      type="text"
-                      id="username"
-                      className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Tên người dùng SOCKS"}
-                      readOnly={loadingCredentials}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="password" className="block text-sm font-medium mb-1 text-gray-300">
-                      Mật khẩu SOCKS
-                    </label>
-                    <input
-                      type="text" // Đổi thành text để hiển thị password
-                      id="password"
-                      className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Mật khẩu SOCKS"}
-                      readOnly={loadingCredentials}
-                    />
-                  </div>
+          {/* Step 1: Token Input */}
+          {!isAuthenticated && (
+            <div className="bg-[#1f2937] p-6 rounded-lg border border-[#2d3748]">
+              <h2 className="text-xl font-semibold mb-4 text-[#f8b700]">Nhập Token NordVPN</h2>
+              <p className="mb-4 text-gray-300">
+                Để lấy thông tin đăng nhập SOCKS, bạn cần có token xác thực từ tài khoản NordVPN.
+              </p>
+              
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const trimmedToken = token.trim();
+                
+                setError('');
+                
+                if (!trimmedToken) {
+                  setError('Vui lòng nhập token');
+                  return;
+                }
+                
+                setLoading(true);
+                
+                // Lưu token vào localStorage
+                localStorage.setItem('nordvpn_token', trimmedToken);
+                
+                // Lấy thông tin đăng nhập SOCKS
+                fetchUserCredentials(trimmedToken);
+                
+                // Tải danh sách máy chủ
+                fetchSocksServers();
+                
+                setIsAuthenticated(true);
+              }} className="space-y-4">
+                <div className="mb-4">
+                  <label htmlFor="token" className="block text-sm font-medium mb-1 text-gray-300">
+                    Token xác thực
+                  </label>
+                  <input
+                    type="text"
+                    id="token"
+                    className="w-full px-3 py-2 bg-[#121827] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="Nhập token xác thực của bạn tại đây"
+                    disabled={loading}
+                  />
                 </div>
                 
-                <div className="flex flex-col sm:flex-row gap-4 mb-4">
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-[#f8b700] text-black font-medium rounded-md hover:bg-yellow-400 transition-all duration-200"
-                    disabled={loadingCredentials}
-                  >
-                    {loadingCredentials ? 'Đang xử lý...' : 'Lưu thông tin'}
-                  </button>
-                  
-                  <button
-                    type="button"
-                    className="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-all duration-200"
-                    onClick={downloadProxies}
-                    disabled={!username || !password || loadingCredentials}
-                  >
-                    {loadingCredentials ? 'Đang xử lý...' : `Tải xuống ${selectedCountry || 'tất cả'} proxy`}
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-[#f8b700] hover:bg-[#f8b700]/90 text-black font-medium px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-black" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Đang xử lý...
+                    </span>
+                  ) : 'Tiếp tục'}
+                </button>
               </form>
               
-              {isAuthenticated && (
-                <div className="text-green-400 text-sm">
-                  <span className="flex items-center">
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    Thông tin đăng nhập đã được lưu
-                  </span>
+              <div className="mt-4 text-sm text-gray-400">
+                <p>
+                  Bạn có thể lấy token xác thực bằng cách đăng nhập vào tài khoản NordVPN và truy cập vào trang API.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Form đăng nhập và tải xuống proxy */}
+          {isAuthenticated && (
+            <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748] mb-8">
+              <h2 className="text-xl font-semibold p-6 border-b border-[#2d3748]">Thông tin đăng nhập SOCKS</h2>
+              
+              {error && (
+                <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
+                  <p>{error}</p>
                 </div>
               )}
+              
+              <div className="p-6">
+                <form onSubmit={handleSubmit} className="mb-4">
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label htmlFor="username" className="block text-sm font-medium mb-1 text-gray-300">
+                        Tên người dùng SOCKS
+                      </label>
+                      <input
+                        type="text"
+                        id="username"
+                        className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Tên người dùng SOCKS"}
+                        readOnly={loadingCredentials}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="password" className="block text-sm font-medium mb-1 text-gray-300">
+                        Mật khẩu SOCKS
+                      </label>
+                      <input
+                        type="text" // Đổi thành text để hiển thị password
+                        id="password"
+                        className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder={loadingCredentials ? "Đang lấy thông tin..." : "Mật khẩu SOCKS"}
+                        readOnly={loadingCredentials}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4 mb-4">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-[#f8b700] text-black font-medium rounded-md hover:bg-yellow-400 transition-all duration-200"
+                      disabled={loadingCredentials}
+                    >
+                      {loadingCredentials ? 'Đang xử lý...' : 'Lưu thông tin'}
+                    </button>
+                    
+                    <button
+                      type="button"
+                      className="px-4 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 transition-all duration-200"
+                      onClick={downloadProxies}
+                      disabled={!username || !password || loadingCredentials}
+                    >
+                      {loadingCredentials ? 'Đang xử lý...' : `Tải xuống ${selectedCountry || 'tất cả'} proxy`}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Bộ lọc và danh sách máy chủ */}
-          <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748]">
-            <div className="p-4 border-b border-[#2d3748]">
-              <div className="flex flex-col md:flex-row gap-3 items-center">
-                <div className="w-full md:w-1/2">
-                  <label htmlFor="country" className="block text-sm font-medium mb-1 text-gray-300">
-                    Lọc Quốc Gia
-                  </label>
-                  <select
-                    id="country"
-                    className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
-                    value={selectedCountry}
-                    onChange={(e) => setSelectedCountry(e.target.value)}
-                    disabled={loading}
-                  >
-                    <option value="">Tất cả quốc gia</option>
-                    {countries.map((country) => (
-                      <option key={country.id} value={country.name}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="w-full md:w-1/2">
-                  <label htmlFor="sort" className="block text-sm font-medium mb-1 text-gray-300">
-                    Lọc Theo % Tải
-                  </label>
-                  <select
-                    id="sort"
-                    className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
-                    value={sortOption}
-                    onChange={(e) => setSortOption(e.target.value as 'load-asc' | 'load-desc')}
-                    disabled={loading}
-                  >
-                    <option value="load-asc">Tải thấp nhất</option>
-                    <option value="load-desc">Tải cao nhất</option>
-                  </select>
+          {isAuthenticated && (
+            <div className="bg-[#1f2937] rounded-lg overflow-hidden border border-[#2d3748]">
+              <div className="p-4 border-b border-[#2d3748]">
+                <div className="flex flex-col md:flex-row gap-3 items-center">
+                  <div className="w-full md:w-1/2">
+                    <label htmlFor="country" className="block text-sm font-medium mb-1 text-gray-300">
+                      Lọc Quốc Gia
+                    </label>
+                    <select
+                      id="country"
+                      className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
+                      value={selectedCountry}
+                      onChange={(e) => setSelectedCountry(e.target.value)}
+                      disabled={loading}
+                    >
+                      <option value="">Tất cả quốc gia</option>
+                      {countries.map((country) => (
+                        <option key={country.id} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div className="w-full md:w-1/2">
+                    <label htmlFor="sort" className="block text-sm font-medium mb-1 text-gray-300">
+                      Lọc Theo % Tải
+                    </label>
+                    <select
+                      id="sort"
+                      className="w-full px-3 py-2 bg-[#1a1f2e] border border-[#2d3748] rounded-md text-white focus:border-[#f8b700] focus:ring-1 focus:ring-[#f8b700]"
+                      value={sortOption}
+                      onChange={(e) => setSortOption(e.target.value as 'load-asc' | 'load-desc')}
+                      disabled={loading}
+                    >
+                      <option value="load-asc">Tải thấp nhất</option>
+                      <option value="load-desc">Tải cao nhất</option>
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {error ? (
-              <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
-                <p>{error}</p>
-              </div>
-            ) : filteredServers.length === 0 ? (
-              <div className="p-6 text-center text-gray-400">
-                {loading ? 'Đang tải danh sách máy chủ...' : 'Không tìm thấy máy chủ nào phù hợp với bộ lọc'}
-              </div>
-            ) : (
-              renderServerList()
-            )}
-          </div>
+              {error ? (
+                <div className="bg-red-900/30 border border-red-500 text-red-300 m-6 px-4 py-3 rounded">
+                  <p>{error}</p>
+                </div>
+              ) : filteredServers.length === 0 ? (
+                <div className="p-6 text-center text-gray-400">
+                  {loading ? 'Đang tải danh sách máy chủ...' : 'Không tìm thấy máy chủ nào phù hợp với bộ lọc'}
+                </div>
+              ) : (
+                renderServerList()
+              )}
+            </div>
+          )}
         </div>
       </main>
 

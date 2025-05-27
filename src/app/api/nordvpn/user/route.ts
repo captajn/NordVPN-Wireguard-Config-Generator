@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { token } = body;
+    // Lấy token từ request body
+    const { token } = await request.json();
     
     if (!token) {
       return NextResponse.json({
@@ -12,46 +12,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    console.log('Debug - Using token to fetch credentials');
+    // Tạo Basic Auth token từ token
+    const basicAuth = Buffer.from(`token:${token}`).toString('base64');
     
-    // Tạo Basic Auth header từ token
-    const basicAuthToken = Buffer.from(`token:${token}`).toString('base64');
-    
-    console.log('Debug - Basic Auth token created');
-    
+    // Gọi API để lấy thông tin đăng nhập
     const response = await fetch('https://api.nordvpn.com/v1/users/services/credentials', {
+      method: 'GET',
       headers: {
-        'Authorization': `Basic ${basicAuthToken}`,
-        'Accept': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Origin': 'https://nordvpn.com',
-        'Referer': 'https://nordvpn.com/'
+        'Authorization': `Basic ${basicAuth}`,
+        'Accept': 'application/json'
       }
     });
     
-    console.log('Debug - API credentials response status:', response.status);
-    
     if (!response.ok) {
+      // Xử lý lỗi từ API
       const errorText = await response.text();
-      console.error('API error response:', errorText);
-      
-      return NextResponse.json({
-        success: false,
-        error: `API responded with status: ${response.status}`
-      }, { status: response.status });
+      throw new Error(`API trả về lỗi: ${response.status} - ${errorText}`);
     }
     
+    // Parse dữ liệu JSON từ response
     const data = await response.json();
-    console.log('Debug - API credentials response:', JSON.stringify({
-      username: data.username,
-      passwordLength: data.password?.length || 0
-    }, null, 2));
     
+    // Kiểm tra dữ liệu trả về có đúng định dạng không
     if (!data.username || !data.password) {
-      return NextResponse.json({
-        success: false,
-        error: 'API không trả về thông tin đăng nhập hợp lệ'
-      }, { status: 500 });
+      throw new Error('API không trả về thông tin đăng nhập hợp lệ');
     }
     
     // Lưu token vào cookie để sử dụng cho các API call khác
@@ -70,7 +54,6 @@ export async function POST(request: NextRequest) {
     return cookieResponse;
     
   } catch (error) {
-    console.error('Server API Error:', error);
     return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Đã xảy ra lỗi không xác định'
