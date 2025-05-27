@@ -292,6 +292,11 @@ export default function WireGuardPage() {
     setError('');
     
     try {
+      const savedToken = localStorage.getItem('nordvpn_token');
+      if (!savedToken) {
+        throw new Error('Không tìm thấy token xác thực. Vui lòng đăng nhập lại.');
+      }
+      
       let url = '/api/nordvpn/wireguard';
       
       if (selectedCountryId) {
@@ -301,9 +306,16 @@ export default function WireGuardPage() {
         console.log('Gọi API không có country_id');
       }
       
+      url += (url.includes('?') ? '&' : '?') + `token=${encodeURIComponent(savedToken)}`;
+      
       console.log('Gọi API với URL:', url);
       
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'x-auth-token': savedToken,
+          'Content-Type': 'application/json'
+        }
+      });
       if (!response.ok) {
         throw new Error(`Không thể lấy danh sách máy chủ: ${response.status}`);
       }

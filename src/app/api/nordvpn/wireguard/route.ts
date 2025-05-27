@@ -15,15 +15,24 @@ const DNS_OPTIONS = {
 
 export async function GET(request: NextRequest) {
   try {
-    // Lấy token từ header Authorization hoặc cookie
+    // Lấy token từ header Authorization, query param hoặc cookie
     const authHeader = request.headers.get('Authorization');
+    const url = new URL(request.url);
     let token = null;
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
     } else {
-      token = request.cookies.get('token')?.value || request.headers.get('x-auth-token');
+      // Thử các nguồn token khác nhau
+      token = request.headers.get('x-auth-token') ||
+              url.searchParams.get('token') ||
+              request.cookies.get('token')?.value;
     }
+    
+    console.log('Token source check: Auth Header exists:', !!authHeader);
+    console.log('Token source check: x-auth-token exists:', !!request.headers.get('x-auth-token'));
+    console.log('Token source check: URL token exists:', !!url.searchParams.get('token'));
+    console.log('Token source check: Cookie token exists:', !!request.cookies.get('token')?.value);
     
     // Nếu không có token, trả về lỗi
     if (!token) {
@@ -44,7 +53,6 @@ export async function GET(request: NextRequest) {
     headers['Authorization'] = `Basic ${basicAuthToken}`;
 
     // Lấy country_id từ query parameters nếu có
-    const url = new URL(request.url);
     const countryId = url.searchParams.get('country_id');
     
     console.log('Query parameters:', Object.fromEntries(url.searchParams.entries()));
