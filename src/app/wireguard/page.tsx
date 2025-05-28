@@ -56,7 +56,7 @@ interface ServerInfo {
   publicKeyFetched?: boolean;
 }
 
-type DNSOption = 'cloudflare' | 'google' | 'nordvpn';
+type DNSOption = 'cloudflare' | 'google' | 'nordvpn' | 'adguard' | 'quad9' | 'controld';
 
 interface DNSConfig {
   name: string;
@@ -67,7 +67,10 @@ interface DNSConfig {
 const DNS_CONFIGS: DNSConfig[] = [
   { name: 'Cloudflare DNS', value: 'cloudflare', servers: '1.1.1.1, 1.0.0.1' },
   { name: 'Google DNS', value: 'google', servers: '8.8.8.8, 8.8.4.4' },
-  { name: 'NordVPN DNS', value: 'nordvpn', servers: '103.86.96.100, 103.86.99.100' }
+  { name: 'NordVPN DNS', value: 'nordvpn', servers: '103.86.96.100, 103.86.99.100' },
+  { name: 'AdGuard DNS', value: 'adguard', servers: '94.140.14.14, 94.140.15.15' },
+  { name: 'Quad9 DNS', value: 'quad9', servers: '9.9.9.9, 149.112.112.112' },
+  { name: 'ControlD DNS', value: 'controld', servers: '76.76.2.11, 76.76.10.11' }
 ];
 
 export default function WireGuardPage() {
@@ -93,6 +96,7 @@ export default function WireGuardPage() {
   const [countrySuggestions, setCountrySuggestions] = useState<Country[]>([]);
   const [loadFilter, setLoadFilter] = useState<string>('all');
   const [selectedDNS, setSelectedDNS] = useState<DNSOption>('cloudflare');
+  const [downloadingServerIds, setDownloadingServerIds] = useState<number[]>([]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -548,7 +552,7 @@ export default function WireGuardPage() {
 
   const downloadConfig = async (server: ServerInfo) => {
     try {
-      setLoading(true);
+      setDownloadingServerIds(prev => [...prev, server.id]);
       setError('');
 
       const savedPrivateKey = localStorage.getItem('nordvpn_private_key');
@@ -556,13 +560,13 @@ export default function WireGuardPage() {
       
       if (!savedPrivateKey) {
         setError('Không tìm thấy private key. Vui lòng đăng nhập lại.');
-        setLoading(false);
+        setDownloadingServerIds(prev => prev.filter(id => id !== server.id));
         return;
       }
 
       if (!savedToken) {
         setError('Không tìm thấy token. Vui lòng đăng nhập lại.');
-        setLoading(false);
+        setDownloadingServerIds(prev => prev.filter(id => id !== server.id));
         return;
       }
 
@@ -597,17 +601,23 @@ export default function WireGuardPage() {
       
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${server.hostname}.conf`;
+      a.rel = 'noopener noreferrer';
+      
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      
+      setTimeout(() => {
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      }, 100);
       
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Đã xảy ra lỗi khi tải cấu hình');
     } finally {
-      setLoading(false);
+      setDownloadingServerIds(prev => prev.filter(id => id !== server.id));
     }
   };
 
@@ -973,11 +983,24 @@ export default function WireGuardPage() {
                         <button
                           onClick={() => downloadConfig(server)}
                           className="w-full bg-[#f8b700] hover:bg-[#f8b700]/90 text-black px-3 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          disabled={downloadingServerIds.includes(server.id)}
                         >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                          </svg>
-                          Download
+                          {downloadingServerIds.includes(server.id) ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Đang tải...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                              </svg>
+                              Download
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>

@@ -4,7 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 const DNS_OPTIONS = {
   cloudflare: '1.1.1.1, 1.0.0.1',
   google: '8.8.8.8, 8.8.4.4',
-  nordvpn: '103.86.96.100, 103.86.99.100'
+  nordvpn: '103.86.96.100, 103.86.99.100',
+  adguard: '94.140.14.14, 94.140.15.15',
+  quad9: '9.9.9.9, 149.112.112.112',
+  controld: '76.76.2.11, 76.76.10.11'
 };
 
 /**
